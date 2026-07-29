@@ -3,8 +3,9 @@
 
 The released dataset records Livox packets as
 ``livox_ros_driver2/CustomMsg``.  The converted bag preserves the ROS 2 type
-name ``livox_ros_driver2/msg/CustomMsg`` used by the real Mid-360 driver while
-transcoding the ROS 1 wire format to ROS 2 CDR.
+name and schema ``livox_ros_driver2/msg/CustomMsg`` used by the real Mid-360
+driver while transcoding the ROS 1 wire format to ROS 2 CDR.  The script works
+both from Elevator-LIO's ``scripts/`` directory and from the dataset root.
 """
 
 from __future__ import print_function
@@ -17,7 +18,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 try:
     from rosbags.highlevel import AnyReader
@@ -35,14 +36,44 @@ except ImportError as exc:
 
 
 SCRIPT_PATH = Path(__file__).resolve()
-PACKAGE_ROOT = SCRIPT_PATH.parents[1]
-DEFAULT_INPUT_DIR = PACKAGE_ROOT.parent / "Elevator-LIO-Dataset"
+SCRIPT_DIR = SCRIPT_PATH.parent
+RUNNING_FROM_SOURCE_REPOSITORY = SCRIPT_DIR.name == "scripts"
+PACKAGE_ROOT = SCRIPT_DIR.parent if RUNNING_FROM_SOURCE_REPOSITORY else None
+DEFAULT_INPUT_DIR = (
+    PACKAGE_ROOT.parent / "Elevator-LIO-Dataset"
+    if PACKAGE_ROOT is not None
+    else SCRIPT_DIR
+)
 DEFAULT_DRIVER_MSG_DIR = (
     Path.home() / "下载" / "ws_livox_ros_driver2" / "src" / "livox_ros_driver2" / "msg"
 )
 
 LIVOX_TYPE = "livox_ros_driver2/msg/CustomMsg"
 CUSTOM_MESSAGE_NAMES = ("CustomPoint", "CustomMsg")
+
+# These are the wire-relevant fields from Livox ROS Driver 2.  Keeping an
+# embedded copy makes the dataset-hosted script self-contained; when a driver
+# checkout is found, its definitions are normalized and checked against these
+# fields before use.
+EMBEDDED_LIVOX_MESSAGES = {
+    "CustomPoint": """\
+uint32 offset_time
+float32 x
+float32 y
+float32 z
+uint8 reflectivity
+uint8 tag
+uint8 line
+""",
+    "CustomMsg": """\
+std_msgs/Header header
+uint64 timebase
+uint32 point_num
+uint8 lidar_id
+uint8[3] rsvd
+CustomPoint[] points
+""",
+}
 
 # CDR plus SQLite indexes is normally close to the uncompressed ROS 1 size.
 # Keep a conservative reserve so a conversion does not fill the filesystem.
@@ -70,13 +101,39 @@ def output_type(source_type: str) -> str:
     return source_type
 
 
-def find_driver_msg_dir(explicit_path: Path = None) -> Path:
-    candidates = []
+def normalize_msg_definition(definition: str) -> str:
+    """Return only message fields, ignoring comments and spacing."""
+    fields = []
+    for line in definition.splitlines():
+        field = line.split("#", 1)[0].strip()
+        if field:
+            fields.append(" ".join(field.split()))
+    return "\n".join(fields)
+
+
+def validate_driver_msg_dir(msg_dir: Path) -> Path:
+    resolved = msg_dir.expanduser().resolve()
+    for name in CUSTOM_MESSAGE_NAMES:
+        msg_path = resolved / "{}.msg".format(name)
+        if not msg_path.is_file():
+            raise ConversionError("message definition not found: {}".format(msg_path))
+        actual = normalize_msg_definition(msg_path.read_text(encoding="utf-8"))
+        expected = normalize_msg_definition(EMBEDDED_LIVOX_MESSAGES[name])
+        if actual != expected:
+            raise ConversionError(
+                "{} does not match the Livox ROS Driver 2 {} schema".format(msg_path, name)
+            )
+    return resolved
+
+
+def find_driver_msg_dir(explicit_path: Path = None) -> Optional[Path]:
     if explicit_path is not None:
-        candidates.append(explicit_path.expanduser())
+        return validate_driver_msg_dir(explicit_path)
+
+    candidates = []
     environment_path = os.environ.get("LIVOX_ROS_DRIVER2_MSG_DIR", "").strip()
     if environment_path:
-        candidates.append(Path(environment_path).expanduser())
+        return validate_driver_msg_dir(Path(environment_path))
     candidates.extend(
         (
             DEFAULT_DRIVER_MSG_DIR,
@@ -86,29 +143,30 @@ def find_driver_msg_dir(explicit_path: Path = None) -> Path:
             / "src"
             / "livox_ros_driver2"
             / "msg",
-            PACKAGE_ROOT / "msg",
+            SCRIPT_DIR / "msg",
         )
     )
+    if PACKAGE_ROOT is not None:
+        candidates.append(PACKAGE_ROOT / "msg")
 
     for candidate in candidates:
         if all((candidate / "{}.msg".format(name)).is_file() for name in CUSTOM_MESSAGE_NAMES):
-            return candidate.resolve()
-    raise ConversionError(
-        "Livox message definitions were not found; pass --livox-msg-dir or set "
-        "LIVOX_ROS_DRIVER2_MSG_DIR"
-    )
+            return validate_driver_msg_dir(candidate)
+    return None
 
 
-def create_ros2_typestore(msg_dir: Path):
+def create_ros2_typestore(msg_dir: Optional[Path]):
     store = get_typestore(Stores.ROS2_HUMBLE)
     definitions = {}
     for name in CUSTOM_MESSAGE_NAMES:
-        msg_path = msg_dir / "{}.msg".format(name)
-        if not msg_path.is_file():
-            raise ConversionError("message definition not found: {}".format(msg_path))
+        definition = (
+            (msg_dir / "{}.msg".format(name)).read_text(encoding="utf-8")
+            if msg_dir is not None
+            else EMBEDDED_LIVOX_MESSAGES[name]
+        )
         definitions.update(
             get_types_from_msg(
-                msg_path.read_text(encoding="utf-8"),
+                definition,
                 "livox_ros_driver2/msg/{}".format(name),
             )
         )
@@ -395,7 +453,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "directory containing the ROS 2 driver's CustomMsg.msg and CustomPoint.msg "
-            "(auto-detected by default)"
+            "(auto-detected; exact driver schemas are embedded as a fallback)"
         ),
     )
     parser.add_argument(
@@ -424,7 +482,10 @@ def main(argv: Sequence[str] = None) -> int:
         pending = [source for source, destination in destinations if args.force or not destination.exists()]
 
         driver_msg_dir = find_driver_msg_dir(args.livox_msg_dir)
-        print("Livox ROS 2 message definitions: {}".format(driver_msg_dir))
+        if driver_msg_dir is None:
+            print("Livox ROS 2 message definitions: embedded official driver schema")
+        else:
+            print("Livox ROS 2 message definitions: {} (schema verified)".format(driver_msg_dir))
         ros2_store = create_ros2_typestore(driver_msg_dir)
         plans = []
         for source, destination in destinations:

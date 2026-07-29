@@ -67,6 +67,11 @@ Install the ROS-independent conversion library once:
 python3 -m pip install --user rosbags
 ```
 
+`rosbags` is the converter's only direct Python dependency; pip installs its transitive dependencies
+automatically. The script does not import ROS 1 `rosbag`, ROS 2 `rclpy`, or `rosbag2_py`, and no ROS
+environment needs to be sourced during conversion. It has been exercised in an isolated Python 3.10
+environment with current `rosbags` 0.11.x, matching Ubuntu 22.04 / ROS 2 Humble's default Python version.
+
 Convert one or several sequences (the default input is `../Elevator-LIO-Dataset`):
 
 ```bash
@@ -82,9 +87,13 @@ Convert the complete dataset, optionally to a disk with more free space:
 
 The script verifies topic counts and CDR decoding before publishing each completed output directory. It also
 performs a conservative disk-space check; use `--dry-run` to inspect a conversion without writing anything.
-It searches common `~/下载/...` and `~/Downloads/...` driver locations, then falls back to the matching
-definitions bundled in this repository. Another driver checkout can be selected with `--livox-msg-dir` or
-the `LIVOX_ROS_DRIVER2_MSG_DIR` environment variable.
+It searches common `~/下载/...` and `~/Downloads/...` driver locations and verifies any detected definitions
+against the Livox ROS Driver 2 schema. If neither a driver checkout nor the source repository's definitions
+are available, it uses the same official message fields embedded in the script. Another driver checkout can
+be selected with `--livox-msg-dir` or the `LIVOX_ROS_DRIVER2_MSG_DIR` environment variable.
+
+The same script is also published in the Hugging Face dataset root. In that location, the dataset directory
+itself is the default input, so it can be used on an Ubuntu 22.04 machine that only has ROS 2 Humble installed.
 
 Play a converted sequence after sourcing the ROS 2 workspace:
 

@@ -31,7 +31,7 @@ Elevator-LIO 是面向电梯非惯性运动和跨楼层定位的 LiDAR-惯性里
 - **2026-06-20**：[Elevator-LIO 数据集](https://huggingface.co/datasets/xiaofan0100/Elevator-LIO-Dataset)公开，包含 20 条序列和 79 次电梯乘坐；额外收录 @编程猫小渐 的两条数据。
 - **2026-06-22**：发布 [rosbag 管理器视频](https://www.bilibili.com/video/BV1n3jt64Eoi/?share_source=copy_web&vd_source=392db04838f1edf7d12e58a3d68775d8)，该工具随 Elevator-LIO 一同开源。
 - **2026-06-26**：ROS 1 源码发布。
-- **2026-07-23**：同一套源码支持 ROS 1 Noetic 与 ROS 2 Humble。
+- **2026-07-29**：正式发布 ROS 2 Humble 支持；同一套源码兼容 ROS 1 Noetic 与 ROS 2 Humble。
 - **计划中**：更多数据集发布，包括更多带图像的完整序列。
 - **计划中**：手持采集平台软硬件源码与文档公开。
 

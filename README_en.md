@@ -29,7 +29,7 @@ When elevator mode is disabled in YAML, Elevator-LIO can be used as a regular LI
 - **2026-06-20**: [Elevator-LIO dataset](https://huggingface.co/datasets/xiaofan0100/Elevator-LIO-Dataset) released, including 20 sequences and 79 elevator rides; two additional sequences from @编程猫小渐 are also included.
 - **2026-06-22**: Published the [rosbag manager video](https://www.bilibili.com/video/BV1n3jt64Eoi/?share_source=copy_web&vd_source=392db04838f1edf7d12e58a3d68775d8); the tool is released together with Elevator-LIO.
 - **2026-06-26**: ROS 1 source code released.
-- **2026-07-23**: The same source tree now supports ROS 1 Noetic and ROS 2 Humble.
+- **2026-07-29**: ROS 2 Humble support was officially released; the same source tree supports both ROS 1 Noetic and ROS 2 Humble.
 - **Planned**: More dataset releases, including additional complete sequences with images.
 - **Planned**: Source code and documentation for the handheld data-collection platform.
 

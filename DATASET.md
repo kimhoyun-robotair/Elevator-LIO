@@ -84,6 +84,40 @@ ROS 1 版本的 Elevator-LIO 使用本仓库 `msg/CustomMsg.msg` 和 `msg/Custom
 
 这是因为这些序列的电梯内存在明显反射和多径效应，配套算法 Elevator-LIO 的距离阈值检测会失效。虽然调整阈值可以成功检测，但为了让测评更反映真实效果，并保留后续采用更合适电梯检测方法的空间，我们没有对此类序列做针对性调参。
 
+## 转换为 ROS 2 rosbag2
+
+仓库提供 [`scripts/convert_rosbag1_to_rosbag2.py`](scripts/convert_rosbag1_to_rosbag2.py)，可将发布的
+ROS 1 bag 转换为 ROS 2 Humble 可用的 SQLite3 rosbag2 目录。输出的 Livox 点云类型为
+`livox_ros_driver2/msg/CustomMsg`，名称和字段布局与 MID-360 的 ROS 2 驱动一致；IMU 类型为
+`sensor_msgs/msg/Imu`。脚本会保留支持话题的时间戳和消息数量，并在完成每个输出前检查消息数量和
+CDR 解码。
+
+转换脚本不依赖 ROS 1、ROS 2 Python 包或已 source 的 ROS 环境，只需安装 `rosbags`：
+
+```bash
+python3 -m pip install --user rosbags
+```
+
+从代码仓库根目录转换一个或多个序列（默认输入目录为同级的 `../Elevator-LIO-Dataset`）：
+
+```bash
+./scripts/convert_rosbag1_to_rosbag2.py Office1
+./scripts/convert_rosbag1_to_rosbag2.py Campus1 Dormitory1
+```
+
+转换全部 20 个主序列，或把输出放到其他磁盘：
+
+```bash
+./scripts/convert_rosbag1_to_rosbag2.py --all --dry-run
+./scripts/convert_rosbag1_to_rosbag2.py --all \
+  --output-dir /data/Elevator-LIO-Dataset-rosbag2
+```
+
+脚本也随 Hugging Face 数据集发布；从数据集根目录运行时，默认输入就是当前数据集目录。它内置
+Livox ROS Driver 2 的官方消息字段作为回退，因此 Ubuntu 22.04 + 纯 ROS 2 Humble 环境无需安装
+ROS 1 即可完成转换。播放转换结果时仍需 source ROS 2、Humble 版 `livox_ros_driver2` 以及
+Elevator-LIO 工作空间。完整参数与播放示例见 [scripts/README.md](scripts/README.md)。
+
 ## 下载
 
 数据集与代码仓库分开分发：
