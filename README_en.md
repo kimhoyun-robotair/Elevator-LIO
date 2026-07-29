@@ -29,7 +29,7 @@ When elevator mode is disabled in YAML, Elevator-LIO can be used as a regular LI
 - **2026-06-20**: [Elevator-LIO dataset](https://huggingface.co/datasets/xiaofan0100/Elevator-LIO-Dataset) released, including 20 sequences and 79 elevator rides; two additional sequences from @编程猫小渐 are also included.
 - **2026-06-22**: Published the [rosbag manager video](https://www.bilibili.com/video/BV1n3jt64Eoi/?share_source=copy_web&vd_source=392db04838f1edf7d12e58a3d68775d8); the tool is released together with Elevator-LIO.
 - **2026-06-26**: ROS 1 source code released.
-- **Planned**: ROS 2 source code release.
+- **2026-07-23**: The same source tree now supports ROS 1 Noetic and ROS 2 Humble.
 - **Planned**: More dataset releases, including additional complete sequences with images.
 - **Planned**: Source code and documentation for the handheld data-collection platform.
 
@@ -94,10 +94,13 @@ Elevator-LIO is designed to work out of the box, with practical features, detail
 
 Useful features include:
 
-- **No Livox ROS driver dependency**: custom messages are built inside this package and can be compiled directly in a ROS workspace.
+- **Standalone ROS 1 build, driver-compatible ROS 2 type**: ROS 1 generates the Livox messages locally,
+  while ROS 2 consumes `livox_ros_driver2/msg/CustomMsg` so the subscription exactly matches the real
+  MID-360 driver.
 - **Initial gravity alignment**: regardless of LiDAR mounting direction, the world frame is initialized horizontally.
 - **Spherical or box blind-zone filtering**: near-field points can be removed using either a spherical blind zone or a rectangular box.
-- **Additional body-frame output**: configure `lidar_R_vehicle` and `lidar_t_vehicle` under `yaml/sensors`.
+- **Additional body-frame output**: configure `offset.lidar_R_body` and `offset.lidar_t_body` under
+  `yaml/sensors`.
 - **Simple relocation mode**: load a PCD map, start near the map origin, and run localization against it.
 - **Covariance visualization**: can be enabled under `yaml/logging` for debugging.
 - **High-frequency odometry output**: can be enabled under `yaml/runtime` to publish IMU-preintegrated poses for downstream applications.
@@ -108,24 +111,63 @@ Unlike mainstream LIO systems, Elevator-LIO does not rely on an explicit measure
 
 ### Requirements
 
-The current code is mainly developed and tested on:
+The same source tree and `package.xml` support:
 
-- Ubuntu 20.04
-- ROS Noetic
+- Ubuntu 20.04 + ROS 1 Noetic
+- Ubuntu 22.04 + ROS 2 Humble
+
+These combinations have been regression-tested on x86_64. The core source does not require x86-specific
+instructions, but ARM64 has not yet been validated by a native build and runtime test. On ARM64, build
+Livox-SDK2, `livox_ros_driver2`, and Elevator-LIO natively on the target instead of reusing x86_64 binaries.
 
 OpenCV is currently only used for debugging windows such as covariance matrix and elevator-state curve visualization. These windows are disabled in the default configuration, but the source code and CMake still include and link OpenCV. You can remove these dependencies if needed.
 
-### Build
-
-Place the package under a catkin workspace `src` directory and build:
+The simulation node also requires the JSON header package:
 
 ```bash
-catkin_make
+sudo apt install -y nlohmann-json3-dev
 ```
+
+### Build
+
+For ROS 1, place the package under a catkin workspace `src` directory:
+
+```bash
+ROS1_WS=~/catkin_ws
+cd "$ROS1_WS"
+source /opt/ros/noetic/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+catkin_make -DCMAKE_BUILD_TYPE=Release
+source devel/setup.bash
+```
+
+For ROS 2, Elevator-LIO uses `livox_ros_driver2/msg/CustomMsg`. The recommended setup builds Livox ROS
+Driver 2 for Humble in a separate workspace before building Elevator-LIO:
+
+```bash
+# Build Livox ROS Driver 2 once
+LIVOX_WS=~/ws_livox_ros_driver2
+cd "$LIVOX_WS/src/livox_ros_driver2"
+source /opt/ros/humble/setup.bash
+./build.sh humble
+
+# Build Elevator-LIO
+LIO_ROS2_WS=~/ws_elevator_lio_ros2
+cd "$LIO_ROS2_WS"
+source /opt/ros/humble/setup.bash
+source "$LIVOX_WS/install/setup.bash"
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
+
+The driver and Elevator-LIO may share one colcon workspace, but run `./build.sh humble` from the driver
+directory so that its ROS 2 `package.xml` is selected first. A bare `colcon build` is not sufficient while
+the driver checkout still contains the ROS 1 manifest.
 
 ### Run
 
-Launch directly with:
+Launch on ROS 1 with:
 
 ```bash
 roslaunch lio start.launch
@@ -136,6 +178,17 @@ You can specify a YAML root configuration. The default is `root_config.yaml`:
 ```bash
 roslaunch lio start.launch config_path:=path_to_yaml
 ```
+
+Launch on ROS 2 with:
+
+```bash
+ros2 launch lio start_ros2.launch.py
+ros2 launch lio start_ros2.launch.py config_path:=path_to_yaml
+```
+
+`config_path` values are resolved under the package's `yaml/` directory. The ROS 2 launch accepts
+`use_rviz:=false` to run without RViz2. ROS 1 uses `rviz/LIO.rviz`, while ROS 2 uses
+`rviz/LIO_ros2.rviz`; the elevator status panel is built for both versions.
 
 ### Elevator Mode
 
@@ -168,6 +221,13 @@ Exit elevator mode:
 rostopic pub /LIO/set_elevator_flag std_msgs/Bool "data: false" -1
 ```
 
+The ROS 2 equivalents are:
+
+```bash
+ros2 topic pub --once /LIO/set_elevator_flag std_msgs/msg/Bool "{data: true}"
+ros2 topic pub --once /LIO/set_elevator_flag std_msgs/msg/Bool "{data: false}"
+```
+
 Automatic exit is controlled by:
 
 ```yaml
@@ -180,6 +240,17 @@ The internal elevator state is published at LiDAR rate. `/LIO/in_elevator` keeps
 ### Simulation Node
 
 The early development version includes a `sim_node` for constructing elevator scenarios and generating LiDAR and IMU messages. The code and configuration are under `src/sim`.
+
+The simulator keeps the original path behavior: its default configuration and generated CSV files live under
+the source tree's `src/sim/` directory:
+
+```bash
+# ROS 1 (start roscore first)
+rosrun lio sim_node
+
+# ROS 2
+ros2 run lio sim_node
+```
 
 ### Configuration
 
@@ -253,7 +324,7 @@ relocation:
 
 After mapping, maps are saved under the `PCD` directory.
 
-Log files are generated under a newly created `Temp` directory.
+Log files are generated under the project's `temp` directory.
 
 Core code lives under `src` and `include`.
 
@@ -279,6 +350,10 @@ The `temp` directory stores key data records from the current run.
 ├── README.md
 ├── README_en.md
 ├── rviz                        # RViz display configuration
+├── scripts                     # Dataset download, bag conversion, and evaluation utilities
+│   ├── bag_runner_ui.py
+│   ├── convert_rosbag1_to_rosbag2.py
+│   └── download_dataset.sh
 ├── src                         # C++ implementation
 │   ├── main.cpp
 │   ├── elevator
@@ -309,4 +384,7 @@ If you use this software or dataset, please cite the Elevator-LIO paper:
 
 ## License
 
-This project is released under the [GNU General Public License v2.0 or later](LICENSE). Independent MIT components retain their file-level MIT SPDX identifiers. Third-party code and local modification notes are documented in [THIRD_PARTY.md](include/ikd_tree/THIRD_PARTY.md).
+Original Elevator-LIO code is released under the [GNU General Public License v2.0 or later](LICENSE).
+Independent MIT components retain their file-level MIT SPDX identifiers. Incorporated third-party code,
+including ikd-Tree, retains its upstream GPLv2 notice; provenance and local modifications are documented in
+[THIRD_PARTY.md](include/ikd_tree/THIRD_PARTY.md).

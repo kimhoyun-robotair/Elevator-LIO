@@ -10,12 +10,8 @@
 
 #pragma once // 防止头文件重复包含
 
-#include <ros/ros.h>
-#include <sensor_msgs/Imu.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <nav_msgs/Odometry.h>
-#include <std_msgs/Bool.h>
-#include <tf/transform_broadcaster.h>
+#include "support/ros_compat.h"
+#include <tf2_ros/transform_broadcaster.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -185,10 +181,10 @@ public:
 class SimSensorNode {
 public:
     // 构造函数
-    SimSensorNode(ros::NodeHandle& nh) : nh_(nh) {
+    explicit SimSensorNode(lio_ros::Node& node) : node_(node) {
         // 1. 获取 config_path 参数 (由 run_sim_node 的 main 设置)
         std::string config_path;
-        if (!nh_.getParam("config_path", config_path)) {
+        if (!node_.get_parameter("config_path", config_path)) {
             ROS_WARN("Param 'config_path' not found, using default 'config.jsonc'");
             config_path = "config.jsonc";
         }
@@ -201,19 +197,24 @@ public:
         }
 
         // 3. 设置发布者
-        imu_pub_ = nh_.advertise<sensor_msgs::Imu>(imu_topic_, 200);
-        lidar_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(lidar_topic_, 20);
-        odom_pub_ = nh_.advertise<nav_msgs::Odometry>("/ground_truth/odom", 200);
-        elevator_flag_pub_ = nh_.advertise<std_msgs::Bool>(elevator_flag_topic_, 1, false);
+        imu_pub_ = node_.advertise<lio_ros::Imu>(imu_topic_, 200);
+        lidar_pub_ = node_.advertise<lio_ros::PointCloud2>(lidar_topic_, 20);
+        odom_pub_ = node_.advertise<lio_ros::Odometry>("/ground_truth/odom", 200);
+        elevator_flag_pub_ = node_.advertise<lio_ros::Bool>(elevator_flag_topic_, 1, false);
 
         prepareElevatorFlagSchedule();
         prepareGravityDriftSchedule();
 
         // 4. 定时器
-        imu_timer_ = nh_.createTimer(ros::Duration(1.0/imu_rate_), &SimSensorNode::imuCallback, this);
-        lidar_timer_ = nh_.createTimer(ros::Duration(1.0/lidar_rate_), &SimSensorNode::lidarCallback, this);
+        imu_timer_ = node_.create_timer(imu_rate_, [this]() { imuCallback(); });
+        lidar_timer_ = node_.create_timer(lidar_rate_, [this]() { lidarCallback(); });
 
-        start_wall_time_ = ros::WallTime::now().toSec();
+        start_wall_time_ = lio_ros::steady_time_seconds();
+#if LIO_ROS_VERSION == 1
+        tf_br_ = std::make_unique<tf2_ros::TransformBroadcaster>();
+#else
+        tf_br_ = std::make_unique<tf2_ros::TransformBroadcaster>(*node_.raw());
+#endif
         total_duration_ = player_.states.empty() ? 0 : player_.states.back().t;
         if (initial_gravity_misalignment_enable_) {
             total_duration_ += initial_gravity_misalignment_duration_s_;
@@ -221,10 +222,13 @@ public:
     }
 
 private:
-    ros::NodeHandle nh_;
-    ros::Publisher imu_pub_, lidar_pub_, odom_pub_, elevator_flag_pub_;
-    ros::Timer imu_timer_, lidar_timer_;
-    tf::TransformBroadcaster tf_br_;
+    lio_ros::Node& node_;
+    lio_ros::Publisher<lio_ros::Imu> imu_pub_;
+    lio_ros::Publisher<lio_ros::PointCloud2> lidar_pub_;
+    lio_ros::Publisher<lio_ros::Odometry> odom_pub_;
+    lio_ros::Publisher<lio_ros::Bool> elevator_flag_pub_;
+    lio_ros::Timer imu_timer_, lidar_timer_;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_br_;
 
     DataPlayer player_;
     double start_wall_time_;
@@ -478,7 +482,7 @@ private:
     }
 
     double getElapsedTime() const {
-        return ros::WallTime::now().toSec() - start_wall_time_;
+        return lio_ros::steady_time_seconds() - start_wall_time_;
     }
 
     bool inInitialGravityWarmup(double elapsed) const {
@@ -496,7 +500,7 @@ private:
         if (elevator_flag_index_ >= elevator_flag_times_.size()) return;
         if (t < elevator_flag_times_[elevator_flag_index_]) return;
 
-        std_msgs::Bool flag_msg;
+        lio_ros::Bool flag_msg;
         flag_msg.data = elevator_flag_value_;
         elevator_flag_pub_.publish(flag_msg);
         elevator_flag_index_++;
@@ -506,7 +510,7 @@ private:
      * @brief IMU 数据发布回调函数
      * @param event ROS 定时器事件（通常由 createTimer 触发，用于控制发布频率，如 200Hz）
      */
-    void imuCallback(const ros::TimerEvent&) {
+    void imuCallback() {
         // 1. 安全检查：如果没有仿真状态数据，直接返回，避免崩溃
         if(player_.states.empty()) return;
 
@@ -518,13 +522,13 @@ private:
             applyGravityDriftIfDue(sim_t);
         }
         SimState s = player_.getState(sim_t);
-        ros::Time stamp(elapsed);
+        lio_ros::Time stamp = lio_ros::time_from_seconds(elapsed);
         if (!warmup) {
             publishElevatorFlagIfDue(sim_t);
         }
 
         // 3. 初始化 ROS IMU 消息
-        sensor_msgs::Imu msg;
+        lio_ros::Imu msg;
         msg.header.stamp = stamp; // 使用 CSV 中的仿真时间作为时间戳
         msg.header.frame_id = imu_frame_;         // 设置坐标系 ID，对应 TF 树中的 imu link
 
@@ -566,31 +570,45 @@ private:
 
         if (total_duration_ > 0.0 && elapsed >= total_duration_ && !finished_) {
             finished_ = true;
-            ros::shutdown();
+            lio_ros::shutdown();
         }
     }
 
-    void publishTF(const SimState& s, ros::Time stamp) {
-        // World -> Elevator
-        tf::Transform tx_elev;
-        tx_elev.setOrigin(tf::Vector3(0, 0, s.elev_z));
-        tx_elev.setRotation(tf::Quaternion(q_wc_.x(), q_wc_.y(), q_wc_.z(), q_wc_.w()));
-        tf_br_.sendTransform(tf::StampedTransform(tx_elev, stamp, "world", "elevator_frame"));
+    void publishTF(const SimState& s, const lio_ros::Time& stamp) {
+        lio_ros::TransformStamped elevator_tf;
+        elevator_tf.header.stamp = stamp;
+        elevator_tf.header.frame_id = "world";
+        elevator_tf.child_frame_id = "elevator_frame";
+        elevator_tf.transform.translation.z = s.elev_z;
+        elevator_tf.transform.rotation.x = q_wc_.x();
+        elevator_tf.transform.rotation.y = q_wc_.y();
+        elevator_tf.transform.rotation.z = q_wc_.z();
+        elevator_tf.transform.rotation.w = q_wc_.w();
+        tf_br_->sendTransform(elevator_tf);
 
-        // World -> IMU
-        tf::Transform tx_wb;
-        tx_wb.setOrigin(tf::Vector3(s.p_w.x(), s.p_w.y(), s.p_w.z()));
-        tx_wb.setRotation(tf::Quaternion(s.q_wb.x(), s.q_wb.y(), s.q_wb.z(), s.q_wb.w()));
-        tf_br_.sendTransform(tf::StampedTransform(tx_wb, stamp, "world", imu_frame_));
+        lio_ros::TransformStamped imu_tf;
+        imu_tf.header.stamp = stamp;
+        imu_tf.header.frame_id = "world";
+        imu_tf.child_frame_id = imu_frame_;
+        imu_tf.transform.translation.x = s.p_w.x();
+        imu_tf.transform.translation.y = s.p_w.y();
+        imu_tf.transform.translation.z = s.p_w.z();
+        imu_tf.transform.rotation.x = s.q_wb.x();
+        imu_tf.transform.rotation.y = s.q_wb.y();
+        imu_tf.transform.rotation.z = s.q_wb.z();
+        imu_tf.transform.rotation.w = s.q_wb.w();
+        tf_br_->sendTransform(imu_tf);
 
-        // IMU -> LiDAR
-        tf::Transform tx_sensor;
-        tx_sensor.setIdentity();
-        tf_br_.sendTransform(tf::StampedTransform(tx_sensor, stamp, imu_frame_, lidar_frame_));
+        lio_ros::TransformStamped lidar_tf;
+        lidar_tf.header.stamp = stamp;
+        lidar_tf.header.frame_id = imu_frame_;
+        lidar_tf.child_frame_id = lidar_frame_;
+        lidar_tf.transform.rotation.w = 1.0;
+        tf_br_->sendTransform(lidar_tf);
     }
 
-    void publishOdom(const SimState& s, ros::Time stamp) {
-        nav_msgs::Odometry odom;
+    void publishOdom(const SimState& s, const lio_ros::Time& stamp) {
+        lio_ros::Odometry odom;
         odom.header.stamp = stamp;
         odom.header.frame_id = "world";
         odom.child_frame_id = imu_frame_;
@@ -608,7 +626,7 @@ private:
      * @brief 激光雷达 (LiDAR) 数据仿真回调函数
      * @details 通过几何射线投射 (Ray Casting) 模拟雷达点云数据，包含噪声模型与量程过滤
      */
-    void lidarCallback(const ros::TimerEvent&) {
+    void lidarCallback() {
         // 1. 安全检查：若无状态数据，直接返回，防止处理空数据
         if(player_.states.empty()) return;
 
@@ -617,21 +635,21 @@ private:
         if (inInitialGravityWarmup(elapsed)) {
             if (total_duration_ > 0.0 && elapsed >= total_duration_ && !finished_) {
                 finished_ = true;
-                ros::shutdown();
+                lio_ros::shutdown();
             }
             return;
         }
         double sim_t = getTrajectoryTime(elapsed);
         applyGravityDriftIfDue(sim_t);
         SimState s = player_.getState(sim_t);
-        ros::Time stamp(elapsed);
+        lio_ros::Time stamp = lio_ros::time_from_seconds(elapsed);
         publishElevatorFlagIfDue(sim_t);
 
         // 3. 初始化 PCL 点云容器
         pcl::PointCloud<pcl::PointXYZ> cloud;
         cloud.header.frame_id = lidar_frame_; // 设置 TF 坐标系
         // PCL 库的时间戳通常单位为微秒 (us)
-        cloud.header.stamp = stamp.toNSec() / 1000;
+        cloud.header.stamp = lio_ros::time_to_nanoseconds(stamp) / 1000;
 
         // 4. 准备射线投射的起始状态
         // 使用 p_rel (相对位置) 暗示碰撞检测是在局部环境（如电梯井/箱体）坐标系下进行的
@@ -685,14 +703,14 @@ private:
         }
 
         // 10. 转换格式并发布
-        sensor_msgs::PointCloud2 output;
+        lio_ros::PointCloud2 output;
         pcl::toROSMsg(cloud, output);           // 将 PCL 格式转换为 ROS 消息
         output.header.stamp = stamp; // 使用 CSV 中的仿真时间作为时间戳
         lidar_pub_.publish(output);
 
         if (total_duration_ > 0.0 && elapsed >= total_duration_ && !finished_) {
             finished_ = true;
-            ros::shutdown();
+            lio_ros::shutdown();
         }
     }
 

@@ -185,22 +185,29 @@ void KD_TREE<PointType>::start_thread(){
     pthread_mutex_init(&points_deleted_rebuild_mutex_lock, NULL); 
     pthread_mutex_init(&working_flag_mutex, NULL);
     pthread_mutex_init(&search_flag_mutex, NULL);
-    pthread_create(&rebuild_thread, NULL, multi_thread_ptr, (void*) this);
+    rebuild_thread_started = (pthread_create(&rebuild_thread, NULL, multi_thread_ptr, (void*) this) == 0);
     printf("Multi thread started \n");    
 }
 
 template <typename PointType>
 void KD_TREE<PointType>::stop_thread(){
+    if (!rebuild_thread_started) return;
     pthread_mutex_lock(&termination_flag_mutex_lock);
     termination_flag = true;
     pthread_mutex_unlock(&termination_flag_mutex_lock);
-    if (rebuild_thread) pthread_join(rebuild_thread, NULL);
+    pthread_join(rebuild_thread, NULL);
+    rebuild_thread_started = false;
     pthread_mutex_destroy(&termination_flag_mutex_lock);
     pthread_mutex_destroy(&rebuild_logger_mutex_lock);
     pthread_mutex_destroy(&rebuild_ptr_mutex_lock);
     pthread_mutex_destroy(&points_deleted_rebuild_mutex_lock);
     pthread_mutex_destroy(&working_flag_mutex);
     pthread_mutex_destroy(&search_flag_mutex);     
+}
+
+template <typename PointType>
+void KD_TREE<PointType>::shutdown_rebuild_thread(){
+    stop_thread();
 }
 
 template <typename PointType>

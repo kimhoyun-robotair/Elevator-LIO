@@ -15,7 +15,7 @@ Elevator-LIO 数据集包含 20 条自采真实场景序列，共覆盖 79 次�
 > [!NOTE]
 > 除主数据集外，Hugging Face 仓库还提供 `community_contributions/` 作为社区贡献数据区，用于收录外部用户自愿提供的电梯相关 rosbag。社区贡献数据作为可选补充材料发布，默认不会随下载脚本一起下载。我们欢迎更多用户贡献自己的电梯相关数据，可联系 `xiaofan@sjtu.edu.cn`。
 
-- [ ] 待完成：更多带图像完整序列补充，预计 7 月中下旬
+- [ ] 计划补充更多带图像的完整序列；具体发布时间以后续公告为准。
 
 ## 序列列表
 
@@ -53,14 +53,18 @@ Elevator-LIO 数据集包含 20 条自采真实场景序列，共覆盖 79 次�
 
 ## ROS 话题与消息类型
 
-所有序列均包含以下 LiDAR 和 IMU 消息：
+原始下载文件是 ROS 1 bag。所有序列均包含以下 LiDAR 和 IMU 消息：
 
 | 话题 | 消息类型 | 说明 |
 |---|---|---|
 | `/livox/lidar` | `livox_ros_driver2/CustomMsg` | Livox MID-360 原始点云 |
 | `/livox/imu` | `sensor_msgs/Imu` | MID-360 内置 IMU |
 
-`livox_ros_driver2/CustomMsg` 来自 [Livox ROS Driver 2](https://github.com/Livox-SDK/livox_ros_driver2)。本代码仓库的 `msg/` 目录也提供了运行 Elevator-LIO 所需的兼容消息定义。
+`livox_ros_driver2/CustomMsg` 来自 [Livox ROS Driver 2](https://github.com/Livox-SDK/livox_ros_driver2)。
+ROS 1 版本的 Elevator-LIO 使用本仓库 `msg/CustomMsg.msg` 和 `msg/CustomPoint.msg` 中字段一致的
+包内消息；转换为 rosbag2 后，LiDAR 类型为实机 ROS 2 驱动使用的
+`livox_ros_driver2/msg/CustomMsg`，IMU 类型为 `sensor_msgs/msg/Imu`。转换方法见
+[scripts/README.md](scripts/README.md)。
 
 `Mall2.bag` 和 `Office3.bag` 还包含以下相机消息：
 

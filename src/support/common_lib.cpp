@@ -300,7 +300,7 @@ void load_lio_yaml(const std::vector<string>& file_names) {
     std::vector<std::string> config_paths;
     config_paths.reserve(file_names.size());
     for (const auto& file_name : file_names) {
-        config_paths.push_back(std::string(PACKAGE_ROOT_DIR) + "/yaml/" + file_name);
+        config_paths.push_back(package_share_path + "/yaml/" + file_name);
     }
     YamlReader reader(std::move(config_paths));
     if (reader.load()) {
@@ -741,7 +741,7 @@ string runtime_config_yaml;
 string logging_config_yaml;
 
 void load_root_yaml( string file_name ) {
-    YamlReader reader(std::string(PACKAGE_ROOT_DIR) +  "/yaml/" + file_name);
+    YamlReader reader(package_share_path + "/yaml/" + file_name);
     if (reader.load()) {
         const bool has_split_config =
             reader.readOptional("sensor_config", sensor_config_yaml) &&

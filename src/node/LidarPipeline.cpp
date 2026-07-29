@@ -14,14 +14,13 @@
 #include "elevator/ElevatorSelfExit.h"
 #include "ikd_tree/IkdMap.hpp"
 #include "AdaptiveFilter/AdaptiveVoxelPController.hpp"
-#include <lio/ElevatorState.h>
 #include <pcl/filters/voxel_grid.h>
 #include <sstream>
 #include <iomanip>
 
 // ===================== LidarPipeline =====================
 
-LidarPipeline::LidarPipeline(ros::NodeHandle& nh,
+LidarPipeline::LidarPipeline(lio_ros::Node& nh,
                                std::shared_ptr<SharedBuffers> shared_bufs,
                                std::shared_ptr<EskfEstimator> estimator,
                                IMUProcess& imu_process,
@@ -40,8 +39,8 @@ LidarPipeline::LidarPipeline(ros::NodeHandle& nh,
     , downsampled_cloud_(new PointCloudXYZI)
     , blind_filtered_(new PointCloudXYZI)
 {
-    ele_state_pub_ = nh.advertise<std_msgs::Bool>("/LIO/in_elevator", 1, true);
-    elevator_estimate_pub_ = nh.advertise<lio::ElevatorState>("/LIO/elevator_state", 1, true);
+    ele_state_pub_ = nh.advertise<lio_ros::Bool>("/LIO/in_elevator", 1, true);
+    elevator_estimate_pub_ = nh.advertise<lio_ros::ElevatorState>("/LIO/elevator_state", 1, true);
 }
 
 // ===================== Helper: adaptive voxel init/update =====================
@@ -412,11 +411,11 @@ void LidarPipeline::commitFrame(const FrameData& frame, const State& post_state)
 
     imu_process_.set_state_at_t(const_cast<State&>(post_state), frame.end_time);
 
-    std_msgs::Bool msg;
+    lio_ros::Bool msg;
     msg.data = post_state.in_elevator;
     ele_state_pub_.publish(msg);
 
-    lio::ElevatorState elevator_msg;
+    lio_ros::ElevatorState elevator_msg;
     elevator_msg.header.stamp = get_ros_time(frame.end_time);
     elevator_msg.header.frame_id = "world";
     elevator_msg.in_elevator = post_state.in_elevator;

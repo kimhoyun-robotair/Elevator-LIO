@@ -4,7 +4,7 @@
  */
 
 // src/run_sim_node.cpp
-#include <ros/ros.h>
+#include "support/ros_compat.h"
 #include "ElevatorTrajectory.hpp"
 #include "ObjectRelativeTrajectory.hpp"
 #include "ObjectWorldTrajectory.hpp"
@@ -228,22 +228,22 @@ int main(int argc, char** argv) {
 
     std::cout << "[Step 3] Starting ROS Simulation Node...\n";
 
-    // 1. 初始化 ROS
-    ros::init(argc, argv, "elevator_sim_combined");
-    ros::NodeHandle nh("~");
+    // 初始化 ROS
+    lio_ros::init(argc, argv, "elevator_sim_combined");
+    auto ros_node = std::make_shared<lio_ros::Node>("elevator_sim_combined");
 
-    // 2. 将配置文件路径设置到参数服务器
-    //    SimSensorNode 内部会读取这个参数来找到 json，再从中找到 csv 路径
-    nh.setParam("config_path", cfg_path);
+    // 将配置文件路径设置到参数服务器
+    // SimSensorNode 内部会读取这个参数来找到 json，再从中找到 csv 路径
+    ros_node->set_parameter("config_path", cfg_path);
 
-    // 3. 实例化仿真节点 (类定义在 SimSensorPublisher.hpp 中)
+    // 实例化仿真节点 (类定义在 SimSensorPublisher.hpp 中)
     //    构造函数执行时会自动加载 CSV
-    SimSensorNode simNode(nh);
+    SimSensorNode simNode(*ros_node);
 
     ROS_INFO("Simulation running. Use Rviz to visualize.");
 
-    // 4. 循环等待回调
-    ros::spin();
+    // 循环等待回调
+    lio_ros::spin(*ros_node);
 
     return 0;
 }

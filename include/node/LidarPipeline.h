@@ -11,9 +11,8 @@
 
 #include "support/type.h"
 #include "support/SharedBuffers.h"
-#include <sensor_msgs/PointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
-#include <ros/ros.h>
+#include "support/ros_compat.h"
 #include <deque>
 #include <limits>
 
@@ -32,7 +31,7 @@ public:
         PointCloudXYZI::Ptr dedistorted_cloud;
     };
 
-    LidarPipeline(ros::NodeHandle& nh,
+    LidarPipeline(lio_ros::Node& nh,
                    std::shared_ptr<SharedBuffers> shared_bufs,
                    std::shared_ptr<EskfEstimator> estimator,
                    IMUProcess& imu_process,
@@ -63,8 +62,8 @@ private:
     void handleElevatorExit(State& post_state);
     void commitFrame(const FrameData& frame, const State& post_state);
 
-    ros::Publisher ele_state_pub_;
-    ros::Publisher elevator_estimate_pub_;
+    lio_ros::Publisher<lio_ros::Bool> ele_state_pub_;
+    lio_ros::Publisher<lio_ros::ElevatorState> elevator_estimate_pub_;
 
     std::shared_ptr<SharedBuffers> shared_bufs_;
     std::shared_ptr<EskfEstimator> estimator_;

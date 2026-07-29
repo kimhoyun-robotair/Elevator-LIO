@@ -31,7 +31,7 @@ Elevator-LIO 是面向电梯非惯性运动和跨楼层定位的 LiDAR-惯性里
 - **2026-06-20**：[Elevator-LIO 数据集](https://huggingface.co/datasets/xiaofan0100/Elevator-LIO-Dataset)公开，包含 20 条序列和 79 次电梯乘坐；额外收录 @编程猫小渐 的两条数据。
 - **2026-06-22**：发布 [rosbag 管理器视频](https://www.bilibili.com/video/BV1n3jt64Eoi/?share_source=copy_web&vd_source=392db04838f1edf7d12e58a3d68775d8)，该工具随 Elevator-LIO 一同开源。
 - **2026-06-26**：ROS 1 源码发布。
-- **计划中**：ROS 2 源码发布。
+- **2026-07-23**：同一套源码支持 ROS 1 Noetic 与 ROS 2 Humble。
 - **计划中**：更多数据集发布，包括更多带图像的完整序列。
 - **计划中**：手持采集平台软硬件源码与文档公开。
 
@@ -96,13 +96,15 @@ Elevator-LIO 的设计遵循开箱即用的原则，集成了许多便于使用�
 
 小巧思包括：
 
-- **无 Livox_ros_driver 依赖**：自定义消息在包内构建，在 ROS 系统上可直接编译使用
+- **ROS 1 可独立编译，ROS 2 与实机类型一致**：ROS 1 在包内生成 Livox 消息；ROS 2 直接使用
+  `livox_ros_driver2/msg/CustomMsg`，与 MID-360 驱动发布的话题严格匹配
 - **初始重力对齐**：无论雷达以何种方向放置，世界系都会初始化为水平方向
 - **球形/长方体包围盒滤除**：除了指定球形滤除框，也可以指定长方体区域内点云滤除
-- **预留额外的 body 系输出**：可在 yaml/sensors 中配置 `lidar_R_vehicle` 和 `lidar_t_vehicle`
+- **预留额外的 body 系输出**：可在 `yaml/sensors` 中配置 `offset.lidar_R_body` 和
+  `offset.lidar_t_body`
 - **简单的重定位功能**：支持加载 PCD 地图，然后在原点启动并运行重定位
-- **协方差矩阵可视化**：可在 yaml/logging 中打开，方便调试
-- **高频输出**：可在 yaml/runtime 中打开，将IMU预积分位姿也输出出来，方便下游应用
+- **协方差矩阵可视化**：可在 `yaml/logging` 中打开，方便调试
+- **高频输出**：可在 `yaml/runtime` 中打开，将 IMU 预积分位姿也输出出来，方便下游应用
 
 不同于主流 LIO，Elevator-LIO 没有显式打包概念，遵循“谁来谁更新”的设计理念，在框架上更适合多传感器融合；但这也带来了额外开销：状态机需要以较高频率轮询并检测是否有数据输入。
 
@@ -111,15 +113,19 @@ Elevator-LIO 的设计遵循开箱即用的原则，集成了许多便于使用�
 
 ### 环境要求
 
-当前代码主要在以下环境中开发和测试：
+当前代码使用同一套源码和 `package.xml` 支持：
 
-- Ubuntu 20.04
-- ROS Noetic
+- Ubuntu 20.04 + ROS 1 Noetic
+- Ubuntu 22.04 + ROS 2 Humble
+
+上述组合已在 x86_64 环境完成回归测试。核心源码不依赖 x86 专用指令，但 ARM64 尚未完成真机
+编译和运行验证；在 ARM64 上部署时，需要在目标设备上原生编译 Livox-SDK2、
+`livox_ros_driver2` 和 Elevator-LIO，不能复用 x86_64 预编译库。
 
 OpenCV 目前只用于协方差矩阵和电梯状态曲线的调试窗口，默认配置中这些窗口均关闭；但源码和 CMake
 仍会包含并链接 OpenCV，您可以自行修改代码取消这些依赖。
 
-仿真节点需要`json`依赖支持
+仿真节点需要 JSON 依赖：
 
 ```bash
 sudo apt install -y nlohmann-json3-dev
@@ -127,15 +133,44 @@ sudo apt install -y nlohmann-json3-dev
 
 ### 编译
 
-将代码放入 `src` 目录下编译：
+ROS 1：将代码放入 catkin 工作空间的 `src` 目录后编译：
 
 ```bash
-catkin_make
+ROS1_WS=~/catkin_ws
+cd "$ROS1_WS"
+source /opt/ros/noetic/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+catkin_make -DCMAKE_BUILD_TYPE=Release
+source devel/setup.bash
 ```
+
+ROS 2 使用 `livox_ros_driver2/msg/CustomMsg`。推荐先在独立工作空间中构建 Humble 版
+Livox ROS Driver 2，再构建 Elevator-LIO：
+
+```bash
+# 首次构建 Livox ROS Driver 2
+LIVOX_WS=~/ws_livox_ros_driver2
+cd "$LIVOX_WS/src/livox_ros_driver2"
+source /opt/ros/humble/setup.bash
+./build.sh humble
+
+# 构建 Elevator-LIO
+LIO_ROS2_WS=~/ws_elevator_lio_ros2
+cd "$LIO_ROS2_WS"
+source /opt/ros/humble/setup.bash
+source "$LIVOX_WS/install/setup.bash"
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
+
+也可以把驱动与 Elevator-LIO 放在同一个 colcon 工作空间，但必须从驱动目录执行
+`./build.sh humble`，让驱动先切换到 ROS 2 的 `package.xml`；驱动仍处于 ROS 1 清单状态时，
+不能直接执行裸 `colcon build`。
 
 ### 运行
 
-直接使用 `roslaunch` 运行：
+ROS 1 使用 `roslaunch` 运行：
 
 ```bash
 roslaunch lio start.launch
@@ -147,6 +182,16 @@ roslaunch lio start.launch
 roslaunch lio start.launch config_path:=path_to_yaml
 ```
 
+ROS 2 使用 Python launch 文件运行：
+
+```bash
+ros2 launch lio start_ros2.launch.py
+ros2 launch lio start_ros2.launch.py config_path:=path_to_yaml
+```
+
+`config_path` 从软件包的 `yaml/` 目录读取。如果不需要 RViz/RViz2，
+ROS 2 launch 可添加 `use_rviz:=false`。ROS 1 使用 `rviz/LIO.rviz`，ROS 2 使用
+`rviz/LIO_ros2.rviz`；电梯状态面板在两个版本中均会构建。
 
 ### 电梯模式说明
 
@@ -179,6 +224,13 @@ rostopic pub /LIO/set_elevator_flag std_msgs/Bool "data: true" -1
 rostopic pub /LIO/set_elevator_flag std_msgs/Bool "data: false" -1
 ```
 
+ROS 2 的对应命令为：
+
+```bash
+ros2 topic pub --once /LIO/set_elevator_flag std_msgs/msg/Bool "{data: true}"
+ros2 topic pub --once /LIO/set_elevator_flag std_msgs/msg/Bool "{data: false}"
+```
+
 自动退出通过下面参数控制：
 
 ```yaml
@@ -192,11 +244,21 @@ elevator:
 
 在程序开发早期，我们设计了仿真节点 `sim_node`，用于构造电梯场景并生成 LiDAR 与 IMU 消息。具体程序与配置位于 `src/sim` 中。
 
+仿真仍沿用原有路径语义，默认配置和生成的 CSV 位于源码的 `src/sim/`：
+
+```bash
+# ROS 1（先启动 roscore）
+rosrun lio sim_node
+
+# ROS 2
+ros2 run lio sim_node
+```
+
 ### 参数修改
 
 在 `root_config.yaml` 中分别选择传感器、运行和日志配置：
 
-```yaml title: root_config.yaml
+```yaml
 
 sensor_config: "sensors/livox.yaml"
 runtime_config: "runtime/mapping.yaml"
@@ -266,7 +328,7 @@ relocation:
 
 每次建图结束后，地图都会保存到 `PCD` 文件夹下。
 
-日志文件会生成在新建的 `Temp` 文件夹下。
+日志文件会生成在项目的 `temp` 文件夹下。
 
 核心代码位于 `src` 和 `include` 文件夹下。
 
@@ -286,6 +348,7 @@ relocation:
 │   │   ├── SharedBuffers.h
 │   │   ├── TopicProcess.h
 │   │   ├── YamlReader.*
+│   │   ├── ros_compat.h
 │   │   └── type.h
 │   ├── elevator                # 电梯检测、状态机和 ZUPT 接口
 │   │   ├── ElevatorProcess.h
@@ -302,16 +365,20 @@ relocation:
 │   ├── node                    # LiDAR 处理流水线等节点内部接口
 │   └── rviz                    # 算法调试可视化接口
 ├── launch                      # ROS 节点启动文件
-│   └── start.launch
+│   ├── start.launch
+│   └── start_ros2.launch.py
 ├── msg                         # 项目自定义 ROS 消息
 │   └── *.msg
 ├── package.xml
 ├── README.md
 ├── README_en.md
 ├── rviz                        # RViz 显示配置
-│   └── LIO.rviz
+│   ├── LIO.rviz
+│   └── LIO_ros2.rviz
 ├── scripts                     # Bag Runner、数据分析和绘图脚本
-│   └── bag_runner_ui.py
+│   ├── bag_runner_ui.py
+│   ├── convert_rosbag1_to_rosbag2.py
+│   └── download_dataset.sh
 ├── src                         # C++ 源码实现
 │   ├── main.cpp
 │   ├── elevator                # 电梯检测、状态机和 ZUPT 实现
@@ -343,18 +410,16 @@ relocation:
 使用本软件或数据集时，请引用 Elevator-LIO 论文：
 
 ```bibtex
-@misc{zhang2026elevatorlio,
-      title={Elevator-LIO: Robust LiDAR-Inertial Odometry for Multi-Floor Navigation under Elevator-Induced Non-Inertial Motion}, 
-      author={Yifan Zhang and Yudong Huang and Yuchong Zhang and Changze Li and Haoran Liu and Ming Yang and Tong Qin},
-      year={2026},
-      eprint={2605.24495},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2605.24495}, 
+@article{zhang2026elevatorlio,
+  title={Elevator-LIO: Robust LiDAR-Inertial Odometry for Multi-Floor Navigation under Elevator-Induced Non-Inertial Motion},
+  author={Zhang, Yifan and Huang, Yudong and Zhang, Yuchong and Li, Changze and Liu, Haoran and Yang, Ming and Qin, Tong},
+  journal={arXiv preprint arXiv:2605.24495},
+  year={2026}
 }
-
 ```
 
 ## 许可证
 
-本项目整体以 [GNU General Public License v2.0 or later](LICENSE) 发布。仓库包含的独立 MIT 组件继续保留各自文件头中的 MIT 标识；第三方代码及修改说明见 [THIRD_PARTY.md](include/ikd_tree/THIRD_PARTY.md)。
+本项目自有代码以 [GNU General Public License v2.0 or later](LICENSE) 发布。仓库包含的独立
+MIT 组件继续保留各自文件头中的 MIT 标识；ikd-Tree 等第三方代码保留其上游 GPLv2
+授权说明，来源和本地修改见 [THIRD_PARTY.md](include/ikd_tree/THIRD_PARTY.md)。

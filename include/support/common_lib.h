@@ -13,9 +13,7 @@
 #define MP_PROC_NUM 3
 
 #include <Eigen/Eigen>
-#include <geometry_msgs/Pose.h>  // 替代 geometry_msgs/msg/detail/pose__struct.hpp
-#include <sensor_msgs/Imu.h>     // 替代 sensor_msgs/msg/imu.h
-#include <ros/ros.h>            // 替代 rclcpp/rclcpp.hpp
+#include "support/ros_compat.h"
 #include <pcl/common/transforms.h>
 #include "ikd_tree/ikd_Tree.h"
 #include "ikd_tree/IkdMap.hpp"
@@ -28,7 +26,6 @@
 
 // 这里是轮速计消息定义 ROS1
 // #include "yhs_can_msgs/wheel_info.h"
-#include "lio/wheel_info.h"
 
 #include <chrono>      // std::chrono::milliseconds
 #include <algorithm>
@@ -380,6 +377,7 @@ extern bool EXIT_FROM_ELEVATOR;
 extern bool ELEVATOR_TRIGGER;
 
 extern string current_tempdir_log;
+extern string package_share_path;
 
 
 /************ variability load from yaml ************/
@@ -539,17 +537,15 @@ void load_root_yaml(string file_name);
 
 
 // 时间戳转换为秒
-inline double get_time_sec(const ros::Time &time)
+inline double get_time_sec(const lio_ros::Time &time)
 {
-    return time.toSec();
+    return lio_ros::time_to_seconds(time);
 }
 
 // 时间戳转换为ros时间
-inline ros::Time get_ros_time(double timestamp)
+inline lio_ros::Time get_ros_time(double timestamp)
 {
-    int32_t sec = static_cast<int32_t>(std::floor(timestamp));
-    uint32_t nanosec = static_cast<uint32_t>((timestamp - std::floor(timestamp)) * 1e9);
-    return ros::Time(sec, nanosec);
+    return lio_ros::time_from_seconds(timestamp);
 }
 
 

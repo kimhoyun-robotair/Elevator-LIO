@@ -64,7 +64,7 @@ void LIONode::save_singel_clouds_world(PointCloudXYZI::Ptr clouds_lidar) {
             // 时间戳保留9位小数
             std::stringstream ss;
             auto time_stamp = get_ros_time(lidar_end_time);
-            ss << std::fixed << std::setprecision(9) << time_stamp.toSec();
+            ss << std::fixed << std::setprecision(9) << get_time_sec(time_stamp);
             // 补充完整路径
             std::string file_path = folder_name + "/" + ss.str()+".pcd";
             // 只有在保存时才打印，避免频繁IO
@@ -121,6 +121,9 @@ void shutdown_save_maps() {
         for (auto &pcd_path : incremental_paths) std::remove(pcd_path.c_str());
     }
 
+    // The rebuild worker may replace and free subtrees.  Stop and join it before
+    // traversing the full tree during shutdown so flatten() sees a stable tree.
+    ikdtree.shutdown_rebuild_thread();
     if (ikdtree.Root_Node != nullptr) {
         PointVector points;
         ikdtree.flatten(ikdtree.Root_Node, points, NOT_RECORD);

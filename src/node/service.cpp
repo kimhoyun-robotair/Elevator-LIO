@@ -8,7 +8,7 @@
 #include "support/LIONode.h"
 
 
-void LIONode::elevatorFlagCallback(const std_msgs::Bool::ConstPtr& msg)
+void LIONode::elevatorFlagCallback(const lio_ros::BoolConstPtr& msg)
 {
     if (!elevator_enable) {
         ELEVATOR_TRIGGER = false;

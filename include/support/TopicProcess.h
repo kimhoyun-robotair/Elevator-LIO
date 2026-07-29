@@ -11,12 +11,8 @@
 #include <deque>
 #include <pcl/common/common.h>
 #include <memory>
-#include <sensor_msgs/PointCloud2.h>  // 替代 sensor_msgs/msg/point_cloud2.hpp
-#include <sensor_msgs/Imu.h>          // 替代 sensor_msgs/msg/imu.hpp
-#include <ros/ros.h>                  // 替代 rclcpp/rclcpp.hpp
+#include "support/ros_compat.h"
 #include <pcl_conversions/pcl_conversions.h>
-// #include <livox_ros_driver2/CustomMsg.h>  // 替代 livox_ros_driver2/msg/custom_msg.hpp
-#include <lio/CustomMsg.h>
 #include "support/common_lib.h"
 #include "support/type.h"
 #include <condition_variable>  // 包含条件变量的头文件
@@ -110,12 +106,12 @@ public:
     explicit TopicProcess(std::shared_ptr<SharedBuffers> buffers)
     : buffers_(std::move(buffers)) {}
     /* topic reader */
-    void receive_points(const lio::CustomMsgConstPtr &msg);
-    void receive_points_ntu(const sensor_msgs::PointCloud2::ConstPtr &msg);
-    void receive_points_velodyne(const sensor_msgs::PointCloud2::ConstPtr &msg);
-    void receive_points_xt32(const sensor_msgs::PointCloud2::ConstPtr &msg);
-    void receive_imu(const sensor_msgs::Imu::ConstPtr& msg);
-    void receive_wheel(const lio::wheel_infoConstPtr& msg);
+    void receive_points(const lio_ros::CustomMsgConstPtr &msg);
+    void receive_points_ntu(const lio_ros::PointCloud2ConstPtr &msg);
+    void receive_points_velodyne(const lio_ros::PointCloud2ConstPtr &msg);
+    void receive_points_xt32(const lio_ros::PointCloud2ConstPtr &msg);
+    void receive_imu(const lio_ros::ImuConstPtr& msg);
+    void receive_wheel(const lio_ros::WheelInfoConstPtr& msg);
     /* data synchronization and organization */
     // bool sync_packages(MeasureGroup &meas);
     /* get method */

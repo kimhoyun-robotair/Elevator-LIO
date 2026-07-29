@@ -27,7 +27,11 @@ yaml/
 默认启动命令为：
 
 ```bash
+# ROS 1
 roslaunch lio start.launch
+
+# ROS 2
+ros2 launch lio start_ros2.launch.py
 ```
 
 此时读取：
@@ -39,7 +43,11 @@ yaml/root_config.yaml
 也可以通过 `config_path` 指定 `yaml/` 目录下的其他根配置：
 
 ```bash
+# ROS 1
 roslaunch lio start.launch config_path:=root_config.yaml
+
+# ROS 2
+ros2 launch lio start_ros2.launch.py config_path:=root_config.yaml
 ```
 
 `config_path` 是相对于当前软件包 `yaml/` 目录的路径，不是相对于终端工作目录的路径。
@@ -88,10 +96,10 @@ lidar_type: 1
 
 | 数值 | 配置文件 | 输入消息 | 说明 |
 | --- | --- | --- | --- |
-| `1` | `livox.yaml` | `lio/CustomMsg` | 使用 Livox 自定义点云解析器 |
-| `2` | `ouster.yaml` | `sensor_msgs/PointCloud2` | 使用 Ouster 字段和时间戳解析方式 |
-| `3` | `velodyne.yaml` | `sensor_msgs/PointCloud2` | 使用 Velodyne 字段和时间戳解析方式 |
-| `4` | `xt32.yaml` | `sensor_msgs/PointCloud2` | 使用 XT32 字段和时间戳解析方式 |
+| `1` | `livox.yaml` | ROS 1：`lio/CustomMsg`；ROS 2：`livox_ros_driver2/msg/CustomMsg` | 使用 Livox 自定义点云解析器 |
+| `2` | `ouster.yaml` | ROS 1：`sensor_msgs/PointCloud2`；ROS 2：`sensor_msgs/msg/PointCloud2` | 使用 Ouster 字段和时间戳解析方式 |
+| `3` | `velodyne.yaml` | ROS 1：`sensor_msgs/PointCloud2`；ROS 2：`sensor_msgs/msg/PointCloud2` | 使用 Velodyne 字段和时间戳解析方式 |
+| `4` | `xt32.yaml` | ROS 1：`sensor_msgs/PointCloud2`；ROS 2：`sensor_msgs/msg/PointCloud2` | 使用 XT32 字段和时间戳解析方式 |
 
 Ouster 和 Velodyne 的点时间解析已按 Fast-LIO2 的约定对齐：点云 `curvature` 字段保存相对帧起点的毫秒级时间偏移。XT32 使用独立解析模板，尚未按 Fast-LIO2 进行系统性对齐验证。
 
@@ -157,9 +165,9 @@ topic_sub:
 | 字段 | 说明 |
 | --- | --- |
 | `lidar_topic_name` | 原始 LiDAR 点云话题，消息内容必须与 `lidar_type` 对应的解析器匹配 |
-| `imu_topic_name` | IMU 数据话题，消息类型为 `sensor_msgs/Imu` |
-| `wheel_topic_name` | 轮速计话题，当前消息类型为 `lio/wheel_info`；仅在 `wheel.wheel_enable: true` 时参与状态更新 |
-| `elevator_flag_topic_name` | 手动控制电梯状态的话题，消息类型为 `std_msgs/Bool`；`true` 表示触发，`false` 表示取消 |
+| `imu_topic_name` | IMU 数据话题；ROS 1 为 `sensor_msgs/Imu`，ROS 2 为 `sensor_msgs/msg/Imu` |
+| `wheel_topic_name` | 轮速计话题；ROS 1 为 `lio/wheel_info`，ROS 2 为 `lio/msg/WheelInfo`；仅在 `wheel.wheel_enable: true` 时参与状态更新 |
+| `elevator_flag_topic_name` | 手动控制电梯状态的话题；ROS 1 为 `std_msgs/Bool`，ROS 2 为 `std_msgs/msg/Bool`；`true` 表示触发，`false` 表示取消 |
 
 轮速计回调使用的是本项目保留的特定数据格式和语义。接入其他底盘时，不能只修改话题名，还需要检查并适配 `receive_wheel` 的消息类型、单位、符号和车体坐标方向。
 
@@ -174,7 +182,8 @@ topic_sub:
 | `runtime/mapping.yaml` | 正常 LIO 建图，持续向 ikd-tree 添加新点 |
 | `runtime/relocation.yaml` | 预加载已有 PCD 地图，在已有地图中定位，不继续积累地图 |
 
-两份文件几乎一致，主要差距在`relocation`字段。
+两份文件使用相同的配置结构，但地图范围、重定位、电梯检测、ZUPT 和退出 z-ICP 默认值存在差异；
+完整对照见第 15 节。
 
 ## 4. 原始点筛选和体素降采样 `downsample`
 
@@ -1122,7 +1131,7 @@ log:
 
 1. 启动节点，确认终端列出的三个配置文件正确。
 2. 检查启动打印中的雷达类型、外参、话题、降采样和电梯开关。
-3. 使用 `rostopic info` 确认输入消息类型与解析器一致。
+3. ROS 1 使用 `rostopic info`、ROS 2 使用 `ros2 topic info -v`，确认输入消息类型与解析器一致。
 4. 使用短 bag 运行，检查点云、里程计和 TF。
 5. 检查本次运行日志目录是否生成预期文件。
 6. 修改电梯或估计器门限后，用固定数据集进行前后对比，不要只根据单次 RViz 外观判断效果。

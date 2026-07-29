@@ -15,7 +15,7 @@ extern vector<string> incremental_paths;
 /********************************************** Publish Function **********************************************/
 
 void LIONode::publish_imu_odometry(State state, double stamp_sec) {
-    nav_msgs::Odometry odom_imu;
+    lio_ros::Odometry odom_imu;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
     // odom.header.stamp = ros::Time::now();  // 使用 ROS 1 的时间戳
     odom_imu.header.stamp = get_ros_time(odom_stamp);
@@ -46,8 +46,8 @@ void LIONode::publish_imu_odometry(State state, double stamp_sec) {
     odom_imu_pub_.publish(odom_imu);
 
     //Path
-    static nav_msgs::Path odom_path;
-    geometry_msgs::PoseStamped this_pose_stamped;
+    static lio_ros::Path odom_path;
+    lio_ros::PoseStamped this_pose_stamped;
 
     this_pose_stamped.pose = odom_imu.pose.pose; // 使用已有的里程计姿态信息
     this_pose_stamped.header.stamp = odom_imu.header.stamp;
@@ -60,7 +60,7 @@ void LIONode::publish_imu_odometry(State state, double stamp_sec) {
     odom_path_pub_.publish(odom_path);
 
     // 发布tf变换
-    geometry_msgs::TransformStamped trans;
+    lio_ros::TransformStamped trans;
     trans.header.frame_id = "world";
     trans.header.stamp = odom_imu.header.stamp;
     trans.child_frame_id = "IMU";
@@ -75,7 +75,7 @@ void LIONode::publish_imu_odometry(State state, double stamp_sec) {
 }
 
 void LIONode::publish_body_odometry(State state, double stamp_sec) {
-    nav_msgs::Odometry odom_body;
+    lio_ros::Odometry odom_body;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
     odom_body.header.stamp = get_ros_time(odom_stamp);
     odom_body.header.frame_id = "world";
@@ -110,7 +110,7 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
     odom_body_pub_.publish(odom_body);
 
     // 发布tf变换
-    geometry_msgs::TransformStamped trans;
+    lio_ros::TransformStamped trans;
     trans.header.frame_id = "world";
     trans.header.stamp = odom_body.header.stamp;
     trans.child_frame_id = "body";
@@ -131,7 +131,7 @@ void LIONode::publish_Dedistort_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
     if (clouds_lidar_pub_every_n > 1 && (publish_frame_counter % clouds_lidar_pub_every_n) != 0) {
         return;
     }
-    sensor_msgs::PointCloud2 cloud_msg;
+    lio_ros::PointCloud2 cloud_msg;
     pcl::toROSMsg(*Dedistort_clouds_world, cloud_msg);
     cloud_msg.header.frame_id = "world";
     // cloud_msg.header.stamp = ros::Time::now();
@@ -141,7 +141,7 @@ void LIONode::publish_Dedistort_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
 
 void LIONode::publish_Effect_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
     if (!cloud || cloud->empty()) return;
-    sensor_msgs::PointCloud2 cloud_msg;
+    lio_ros::PointCloud2 cloud_msg;
     pcl::toROSMsg(*cloud, cloud_msg);
     cloud_msg.header.frame_id = "lidar";
     cloud_msg.header.stamp = get_ros_time(lidar_end_time);
@@ -150,7 +150,7 @@ void LIONode::publish_Effect_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
 
 void LIONode::publish_Rejected_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
     if (!cloud || cloud->empty()) return;
-    sensor_msgs::PointCloud2 cloud_msg;
+    lio_ros::PointCloud2 cloud_msg;
     pcl::toROSMsg(*cloud, cloud_msg);
     cloud_msg.header.frame_id = "lidar";
     cloud_msg.header.stamp = get_ros_time(lidar_end_time);
@@ -161,7 +161,7 @@ void LIONode::publish_Rejected_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
  * @brief 发布 IMU 系到 lidar 系的静态 tf 变换
  */
 void LIONode::publishStaticTransform() {
-    geometry_msgs::TransformStamped trans;
+    lio_ros::TransformStamped trans;
     trans.header.frame_id = "IMU";
     // trans.header.stamp = ros::Time::now();
     trans.header.stamp = get_ros_time(lidar_end_time);
@@ -197,7 +197,7 @@ void LIONode::publishGlobalMap() {
         /********* 如果需要发布全局地图，则将点云累加到 map_world 中 *********/
         if (global_map_pub_enable) {
             *map_world += *effect_down_cloud_world;
-            sensor_msgs::PointCloud2 cloud_msg;
+            lio_ros::PointCloud2 cloud_msg;
             pcl::toROSMsg(*map_world, cloud_msg);
             cloud_msg.header.frame_id = "world";
             // cloud_msg.header.stamp = ros::Time::now();
@@ -254,7 +254,7 @@ void LIONode::publishIKDTree() {
         cloud_ikdtree->width = points.size();
         cloud_ikdtree->height = 1;
         cloud_ikdtree->is_dense = true;
-        sensor_msgs::PointCloud2 cloud_msg;
+        lio_ros::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud_ikdtree, cloud_msg);
         cloud_msg.header.frame_id = "world";
         // cloud_msg.header.stamp = ros::Time::now();

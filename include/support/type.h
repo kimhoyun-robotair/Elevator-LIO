@@ -8,8 +8,7 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include <sensor_msgs/Imu.h>  
-#include <sensor_msgs/PointCloud2.h>
+#include "support/ros_compat.h"
 #include <pcl/common/common.h>
 
 // 触发器枚举（判断来了哪一个数据）
@@ -98,8 +97,8 @@ using PointCloudXYZI = pcl::PointCloud<PointType>;
 using PointCloudXYZIPtr = PointCloudXYZI::Ptr; // 共享指针，不必担心局部定义而被被释放
 using PointVector = std::vector<PointType, Eigen::aligned_allocator<PointType>>;
 /* =====  其他消息 / 图像别名（可按需增加） ===== */
-using ImuMsg      = sensor_msgs::Imu;
-using ImuMsgConst = sensor_msgs::Imu::ConstPtr;
+using ImuMsg      = lio_ros::Imu;
+using ImuMsgConst = lio_ros::ImuConstPtr;
 
 
 using StateVec = std::vector<State, Eigen::aligned_allocator<State>>;

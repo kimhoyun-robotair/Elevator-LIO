@@ -22,7 +22,7 @@
  * 约定：
  *  - 世界 z 轴向上为正，重力 g 指向下（模≈9.81）。因此 “向上单位向量”
  *    ezu = -g / ||g||。所有“水平/竖直”计算均以 ezu 为基准。
- *  - 进入/退出只会切换 S.in_elevator 开关，不改变状态维度；STATE_TOTAL 固定 22。
+ *  - 进入/退出只会切换 S.in_elevator 开关，不改变状态维度；STATE_TOTAL 固定 21。
  *  - 1D 子状态 (z, vz, az) 的名义传播与 Q 注入在 stepProcess() 内完成。
  */
 class ElevatorProcess {
@@ -76,7 +76,7 @@ private:
 /**
  * @brief 你项目里的 ESKF 量测更新模板（标量/小维量测）
  *
- * 需要配合列数 = StateIndex::STATE_TOTAL(=22) 的 H 使用：
+ * 需要配合列数 = StateIndex::STATE_TOTAL(=21) 的 H 使用：
  *   K = P Hᵀ (H P Hᵀ + R)^{-1}
  *   注入 + Joseph 形式更新协方差
  * 约定：这是“约束残差”写法 r(x)≈H δx，目标是 r→0，因此 δx = -K r
@@ -88,7 +88,7 @@ inline void ekfUpdate(State& S,
                       const Eigen::Matrix<double, M, 1>& r,
                       const Eigen::Matrix<double, M, M>& R)
 {
-    constexpr int NX = StateIndex::STATE_TOTAL; // 22
+    constexpr int NX = StateIndex::STATE_TOTAL; // 21
     using MatXX = Eigen::Matrix<double, NX, NX>;
     using MatXM = Eigen::Matrix<double, NX, M >;
     using MatMM = Eigen::Matrix<double, M , M >;

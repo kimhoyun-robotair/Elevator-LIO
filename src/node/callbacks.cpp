@@ -17,7 +17,7 @@ extern std::shared_ptr<TopicProcess> p_topic_process;
  * @brief 接收到点云后的回调函数, 支持livox自定义消息类型
  * @param msg 点云数据
  */
-void pcl_cbk_custom(const lio::CustomMsgConstPtr& msg) {
+void pcl_cbk_custom(const lio_ros::CustomMsgConstPtr& msg) {
     if (FSM::current_state == FSM::State::Initializing || FSM::current_state == FSM::State::Waitting) return;
     p_topic_process->receive_points(msg);
 }
@@ -26,7 +26,7 @@ void pcl_cbk_custom(const lio::CustomMsgConstPtr& msg) {
  * @brief 接收到点云后的回调函数, 支持标准点云消息类型
  * @param msg 点云数据
  */
-void pcl_cbk_pc2(const sensor_msgs::PointCloud2::ConstPtr &msg)  {
+void pcl_cbk_pc2(const lio_ros::PointCloud2ConstPtr &msg)  {
     if (FSM::current_state == FSM::State::Initializing || FSM::current_state == FSM::State::Waitting) return;
     switch (lidar_type) {
         case LidarType::Livox:
@@ -48,20 +48,18 @@ void pcl_cbk_pc2(const sensor_msgs::PointCloud2::ConstPtr &msg)  {
 // #include "estimator/IMUProcess.h"
 // IMUProcess imu_process;
 
-void imu_cbk(const sensor_msgs::Imu::ConstPtr& msg) {
+void imu_cbk(const lio_ros::ImuConstPtr& msg) {
     static bool first_imu = true;
     if (first_imu) { FSM::dispatch(FSM::Event::IMUTriger); first_imu = false; }
     p_topic_process->receive_imu(msg);
 }
 
-void wheel_cbk(const lio::wheel_infoConstPtr& msg) {
+void wheel_cbk(const lio_ros::WheelInfoConstPtr& msg) {
     p_topic_process->receive_wheel(msg);
     if (!(wheel_data_log_enable & log_save_enable)) return;
 
-    uint nanosec_num = msg->header.stamp.nsec;
-    uint sec_num = msg->header.stamp.sec;
     static uint64_t wheel_seq = 0;
-    const double stamp = sec_num + nanosec_num * 1e-9;
+    const double stamp = get_time_sec(msg->header.stamp);
 
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(9)

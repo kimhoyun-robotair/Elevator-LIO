@@ -1,16 +1,19 @@
 # 第三方软件声明
 
-Elevator-LIO 整体以 `GPL-2.0-or-later` 许可证发布。独立以 MIT License 提供的文件保留其文件级 SPDX 标识。
+Elevator-LIO 自有代码以 `GPL-2.0-or-later` 许可证发布。独立以 MIT License 提供的文件保留其
+文件级 SPDX 标识；引入的第三方代码继续受各自上游许可证约束。
 
 ## ikd-Tree
 
 - 上游项目：[hku-mars/ikd-Tree](https://github.com/hku-mars/ikd-Tree)
 - 原作者：Yixi Cai、Wei Xu、Fu Zhang 及贡献者
-- 上游许可证：GNU General Public License, version 2
+- 上游许可证：GNU General Public License, version 2（上游原文为 `GPLv2`）
 - 本仓库中的文件：`include/ikd_tree/ikd_Tree.h` 和 `include/ikd_tree/ikd_Tree.cpp`
 - 本地修改：集成到 Elevator-LIO，适配路径和类型，并补充注释
 
-上游项目声明其源代码以 GPLv2 发布。Elevator-LIO 在此记录上游声明，并在源码和包元数据中将仓库许可证标识为 `GPL-2.0-or-later`。公开发布前，维护者应保留上游声明，并确认上游授权是 GPL-2.0-only，还是包含 later-version 选项。
+上游 README 和许可证文件均将该项目描述为 GPLv2，但没有给出明确的文件级 SPDX
+`only/or-later` 后缀。本说明因此只保留上游的 `GPLv2` 原始表述，不擅自将第三方授权扩展为
+`GPL-2.0-or-later`。再发布本仓库时应同时保留上游来源、GPLv2 许可证文本和本地修改说明。
 
 在学术工作中使用 ikd-Tree 时，应引用以下论文：
 

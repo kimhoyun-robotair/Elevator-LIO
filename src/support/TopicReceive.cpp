@@ -12,8 +12,6 @@
  */
 
 #include "support/TopicProcess.h"
-#include <sensor_msgs/PointCloud2.h>  // 添加头文件
-#include <sensor_msgs/PointField.h>
 #include <pcl_conversions/pcl_conversions.h>  // 用于转换 PointCloud2 <-> PCL 点云
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
@@ -54,7 +52,7 @@ double inferPointTimeToMillisecond(double raw_time) {
  * 在每次接收到 lidar topic 后执行
  * @param msg: 接收到的点云数据
  */
-void TopicProcess::receive_points_ntu(const sensor_msgs::PointCloud2::ConstPtr &msg)
+void TopicProcess::receive_points_ntu(const lio_ros::PointCloud2ConstPtr &msg)
 {
     if (FSM::current_state == FSM::State::Initializing) return;
     cloud_topic_count_++;
@@ -62,7 +60,7 @@ void TopicProcess::receive_points_ntu(const sensor_msgs::PointCloud2::ConstPtr &
 
     struct FieldMeta {
         int offset = -1;
-        uint8_t datatype = sensor_msgs::PointField::FLOAT32;
+        uint8_t datatype = lio_ros::PointField::FLOAT32;
     };
     auto find_field = [&](const std::string &name) {
         FieldMeta meta;
@@ -77,14 +75,14 @@ void TopicProcess::receive_points_ntu(const sensor_msgs::PointCloud2::ConstPtr &
     };
     auto read_scalar = [](const uint8_t *ptr, uint8_t datatype) -> double {
         switch (datatype) {
-            case sensor_msgs::PointField::INT8:   return static_cast<double>(*reinterpret_cast<const int8_t *>(ptr));
-            case sensor_msgs::PointField::UINT8:  return static_cast<double>(*reinterpret_cast<const uint8_t *>(ptr));
-            case sensor_msgs::PointField::INT16:  return static_cast<double>(*reinterpret_cast<const int16_t *>(ptr));
-            case sensor_msgs::PointField::UINT16: return static_cast<double>(*reinterpret_cast<const uint16_t *>(ptr));
-            case sensor_msgs::PointField::INT32:  return static_cast<double>(*reinterpret_cast<const int32_t *>(ptr));
-            case sensor_msgs::PointField::UINT32: return static_cast<double>(*reinterpret_cast<const uint32_t *>(ptr));
-            case sensor_msgs::PointField::FLOAT64:return *reinterpret_cast<const double *>(ptr);
-            case sensor_msgs::PointField::FLOAT32:
+            case lio_ros::PointField::INT8:   return static_cast<double>(*reinterpret_cast<const int8_t *>(ptr));
+            case lio_ros::PointField::UINT8:  return static_cast<double>(*reinterpret_cast<const uint8_t *>(ptr));
+            case lio_ros::PointField::INT16:  return static_cast<double>(*reinterpret_cast<const int16_t *>(ptr));
+            case lio_ros::PointField::UINT16: return static_cast<double>(*reinterpret_cast<const uint16_t *>(ptr));
+            case lio_ros::PointField::INT32:  return static_cast<double>(*reinterpret_cast<const int32_t *>(ptr));
+            case lio_ros::PointField::UINT32: return static_cast<double>(*reinterpret_cast<const uint32_t *>(ptr));
+            case lio_ros::PointField::FLOAT64:return *reinterpret_cast<const double *>(ptr);
+            case lio_ros::PointField::FLOAT32:
             default:
                 return static_cast<double>(*reinterpret_cast<const float *>(ptr));
         }
@@ -197,7 +195,7 @@ void TopicProcess::receive_points_ntu(const sensor_msgs::PointCloud2::ConstPtr &
     }
 }
 
-void TopicProcess::receive_points_velodyne(const sensor_msgs::PointCloud2::ConstPtr& msg)
+void TopicProcess::receive_points_velodyne(const lio_ros::PointCloud2ConstPtr& msg)
 {
     // === 1. Initial Setup and Frequency Calculation ===
     cloud_topic_count_++;
@@ -305,7 +303,7 @@ void TopicProcess::receive_points_velodyne(const sensor_msgs::PointCloud2::Const
     }
 }
 
-void TopicProcess::receive_points_xt32(const sensor_msgs::PointCloud2::ConstPtr &msg)
+void TopicProcess::receive_points_xt32(const lio_ros::PointCloud2ConstPtr &msg)
 {
     if (FSM::current_state == FSM::State::Initializing) return;
     cloud_topic_count_++;
@@ -426,7 +424,7 @@ void TopicProcess::receive_points_xt32(const sensor_msgs::PointCloud2::ConstPtr 
     }
 }
 
-void TopicProcess::receive_points(const lio::CustomMsgConstPtr& msg)
+void TopicProcess::receive_points(const lio_ros::CustomMsgConstPtr& msg)
 {
 
     cloud_topic_count_++;
@@ -505,7 +503,7 @@ void TopicProcess::receive_points(const lio::CustomMsgConstPtr& msg)
  * 在每次接收到 IMU topic后执行
  * @param msg: 接收到的IMU数据
  */
-void TopicProcess::receive_imu(const sensor_msgs::ImuConstPtr& msg)
+void TopicProcess::receive_imu(const lio_ros::ImuConstPtr& msg)
 {
     imu_topic_count_++;
     double timestamp = get_time_sec(msg->header.stamp);
@@ -514,7 +512,7 @@ void TopicProcess::receive_imu(const sensor_msgs::ImuConstPtr& msg)
     double time_sys = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count() * 1e-6;
 
 
-    static sensor_msgs::ImuConstPtr last_imu_msg = msg;
+    static lio_ros::ImuConstPtr last_imu_msg = msg;
     Eigen::Vector3d last_ang(last_imu_msg->angular_velocity.x,
                              last_imu_msg->angular_velocity.y,
                              last_imu_msg->angular_velocity.z);
@@ -524,7 +522,7 @@ void TopicProcess::receive_imu(const sensor_msgs::ImuConstPtr& msg)
 
     if ((curr_ang - last_ang).norm() > THRE_DIFF_IMU) {
         std::cerr << "[receive_imu] imu_acc outliers detected!\n";
-        sensor_msgs::ImuPtr corrected_msg(new sensor_msgs::Imu(*last_imu_msg));
+        lio_ros::ImuPtr corrected_msg(new lio_ros::Imu(*last_imu_msg));
         corrected_msg->header.stamp = msg->header.stamp;
         buffers_->pushBackSafe(buffers_->imu_buf, corrected_msg);
     } else {
@@ -560,7 +558,7 @@ void TopicProcess::receive_imu(const sensor_msgs::ImuConstPtr& msg)
  * 将轮速计数据存入轮速缓冲队列
  * @param msg: 接收到的轮速计消息
  */
-void TopicProcess::receive_wheel(const lio::wheel_infoConstPtr& msg)
+void TopicProcess::receive_wheel(const lio_ros::WheelInfoConstPtr& msg)
 {
     wheel_topic_count_++;
     /**
@@ -572,7 +570,7 @@ void TopicProcess::receive_wheel(const lio::wheel_infoConstPtr& msg)
     double v_L = (msg->lf_wheel_fb_velocity + msg->lr_wheel_fb_velocity) / 2.0;
     double v_R = (msg->rf_wheel_fb_velocity + msg->rr_wheel_fb_velocity) / 2.0;
 
-    double timestamp = msg->header.stamp.sec + msg->header.stamp.nsec * 1e-9;
+    double timestamp = get_time_sec(msg->header.stamp);
 
     WheelData wheel_data{};
     wheel_data.timestamp = timestamp;

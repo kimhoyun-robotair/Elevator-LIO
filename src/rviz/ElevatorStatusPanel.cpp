@@ -13,7 +13,15 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
+#if LIO_ROS_VERSION == 1
 #include <pluginlib/class_list_macros.h>
+#else
+#include <pluginlib/class_list_macros.hpp>
+#endif
+#if LIO_ROS_VERSION == 2
+#include <rviz_common/display_context.hpp>
+#include <rviz_common/ros_integration/ros_node_abstraction_iface.hpp>
+#endif
 
 namespace lio_rviz_plugins {
 
@@ -23,7 +31,11 @@ constexpr qint64 kMessageTimeoutMs = 3000;
 }
 
 ElevatorStatusPanel::ElevatorStatusPanel(QWidget* parent)
+#if LIO_ROS_VERSION == 1
     : rviz::Panel(parent) {
+#else
+    : rviz_common::Panel(parent) {
+#endif
     auto* root_layout = new QVBoxLayout;
     auto* topic_layout = new QHBoxLayout;
 
@@ -94,11 +106,30 @@ ElevatorStatusPanel::ElevatorStatusPanel(QWidget* parent)
 
     setDisplayState(DisplayState::Unknown, "等待状态消息");
     setEstimateValues(false);
+#if LIO_ROS_VERSION == 1
     subscribeToTopic();
+#endif
 }
 
+#if LIO_ROS_VERSION == 2
+void ElevatorStatusPanel::onInitialize() {
+    rviz_common::Panel::onInitialize();
+    const auto node_abstraction = getDisplayContext()->getRosNodeAbstraction().lock();
+    if (!node_abstraction) {
+        setDisplayState(DisplayState::Unknown, "无法获取 RViz2 ROS 节点");
+        return;
+    }
+    ros_node_ = node_abstraction->get_raw_node();
+    subscribeToTopic();
+}
+#endif
+
 void ElevatorStatusPanel::subscribeToTopic() {
+#if LIO_ROS_VERSION == 1
     state_sub_.shutdown();
+#else
+    state_sub_.reset();
+#endif
     received_message_ = false;
     setEstimateValues(false);
 
@@ -108,13 +139,23 @@ void ElevatorStatusPanel::subscribeToTopic() {
         return;
     }
 
+#if LIO_ROS_VERSION == 1
     state_sub_ = nh_.subscribe(topic.toStdString(), 1,
                                &ElevatorStatusPanel::stateCallback, this);
+#else
+    if (!ros_node_) {
+        setDisplayState(DisplayState::Unknown, "RViz2 ROS 节点尚未初始化");
+        return;
+    }
+    state_sub_ = ros_node_->create_subscription<lio_ros::ElevatorState>(
+        topic.toStdString(), rclcpp::QoS(1),
+        [this](const lio_ros::ElevatorStateConstPtr msg) { stateCallback(msg); });
+#endif
     setDisplayState(DisplayState::Unknown, QString("等待 %1").arg(topic));
     Q_EMIT configChanged();
 }
 
-void ElevatorStatusPanel::stateCallback(const lio::ElevatorState::ConstPtr& msg) {
+void ElevatorStatusPanel::stateCallback(const lio_ros::ElevatorStateConstPtr& msg) {
     Q_EMIT stateMessageReceived(msg->in_elevator, msg->displacement,
                                 msg->velocity, msg->acceleration);
 }
@@ -177,13 +218,33 @@ void ElevatorStatusPanel::setDisplayState(DisplayState state, const QString& det
     detail_label_->setText(detail);
 }
 
-void ElevatorStatusPanel::save(rviz::Config config) const {
+void ElevatorStatusPanel::save(
+#if LIO_ROS_VERSION == 1
+    rviz::Config config
+#else
+    rviz_common::Config config
+#endif
+) const {
+#if LIO_ROS_VERSION == 1
     rviz::Panel::save(config);
+#else
+    rviz_common::Panel::save(config);
+#endif
     config.mapSetValue("Topic", topic_edit_->text().trimmed());
 }
 
-void ElevatorStatusPanel::load(const rviz::Config& config) {
+void ElevatorStatusPanel::load(
+#if LIO_ROS_VERSION == 1
+    const rviz::Config& config
+#else
+    const rviz_common::Config& config
+#endif
+) {
+#if LIO_ROS_VERSION == 1
     rviz::Panel::load(config);
+#else
+    rviz_common::Panel::load(config);
+#endif
     QString topic;
     if (config.mapGetString("Topic", &topic) && !topic.trimmed().isEmpty()) {
         topic_edit_->setText(topic.trimmed());
@@ -193,4 +254,8 @@ void ElevatorStatusPanel::load(const rviz::Config& config) {
 
 }  // namespace lio_rviz_plugins
 
+#if LIO_ROS_VERSION == 1
 PLUGINLIB_EXPORT_CLASS(lio_rviz_plugins::ElevatorStatusPanel, rviz::Panel)
+#else
+PLUGINLIB_EXPORT_CLASS(lio_rviz_plugins::ElevatorStatusPanel, rviz_common::Panel)
+#endif

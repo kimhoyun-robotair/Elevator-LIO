@@ -9,23 +9,18 @@
 #define LIO_NODE_H
 
 // 相比于 ros2 头文件的变化
-#include <ros/ros.h>  // 替代 rclcpp/rclcpp.hpp 和 rclcpp/node.hpp
-#include <sensor_msgs/PointCloud2.h>  // 替代 sensor_msgs/msg/point_cloud2.hpp
-#include <sensor_msgs/Imu.h>  // 替代 sensor_msgs/msg/imu.hpp
-#include <nav_msgs/Odometry.h>  // 替代 nav_msgs/msg/odometry.hpp
-#include <tf2_ros/transform_broadcaster.h>  // 保持不变
-#include <tf2_ros/static_transform_broadcaster.h>  // 保持不变
+#include "support/ros_compat.h"
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <pcl_conversions/pcl_conversions.h>  // 保持不变
 #include "support/YamlReader.h"
 #include "support/TopicProcess.h"
 #include "estimator/ESEKF.h"
 #include "node/LidarPipeline.h"
-#include <nav_msgs/Path.h>
 #include <csignal>  // 包含信号处理相关的头文件
 
 #include <functional>
 #include <map>
-#include <std_msgs/Bool.h>
 
 struct TimeRecord {
     double lidar_end_time;
@@ -74,7 +69,7 @@ namespace FSM {
 
 class LIONode {
 public:
-    LIONode();
+    explicit LIONode(std::shared_ptr<lio_ros::Node> node);
 
     void publish_imu_odometry(State state, double stamp_sec = -1.0);
     void publish_body_odometry(State state, double stamp_sec = -1.0);
@@ -88,46 +83,46 @@ public:
     void save_singel_clouds_world(PointCloudXYZI::Ptr clouds_lidar);
     static void lasermap_fov_segment();
     static void map_incremental(PointCloudXYZI & lidar_clouds);
-    void timer_1HZ_callback(const ros::TimerEvent& );
-    void timer_10HZ_callback(const ros::TimerEvent& );
-    void timer_500HZ_callback(const ros::TimerEvent& );
-    void timer_2000HZ_callback(const ros::TimerEvent& );
+    void timer_1HZ_callback();
+    void timer_10HZ_callback();
+    void timer_500HZ_callback();
+    void timer_2000HZ_callback();
 
 
 private:
 
 
-    ros::NodeHandle nh_;
-    ros::Publisher clouds_lidar_pub_;
-    ros::Publisher clouds_lidar_effect_pub_;
-    ros::Publisher clouds_lidar_reject_pub_;
-    ros::Publisher global_map_pub_;
-    ros::Publisher ikdtree_pub_;
-    ros::Publisher odom_imu_pub_;
-    ros::Publisher odom_body_pub_;
-    ros::Publisher odom_path_pub_;
-    ros::Subscriber pointcloud_sub_;
-    ros::Subscriber imu_sub_;
-    ros::Subscriber wheel_sub_;
+    std::shared_ptr<lio_ros::Node> node_;
+    lio_ros::Publisher<lio_ros::PointCloud2> clouds_lidar_pub_;
+    lio_ros::Publisher<lio_ros::PointCloud2> clouds_lidar_effect_pub_;
+    lio_ros::Publisher<lio_ros::PointCloud2> clouds_lidar_reject_pub_;
+    lio_ros::Publisher<lio_ros::PointCloud2> global_map_pub_;
+    lio_ros::Publisher<lio_ros::PointCloud2> ikdtree_pub_;
+    lio_ros::Publisher<lio_ros::Odometry> odom_imu_pub_;
+    lio_ros::Publisher<lio_ros::Odometry> odom_body_pub_;
+    lio_ros::Publisher<lio_ros::Path> odom_path_pub_;
+    lio_ros::Subscription pointcloud_sub_;
+    lio_ros::Subscription imu_sub_;
+    lio_ros::Subscription wheel_sub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::unique_ptr<tf2_ros::StaticTransformBroadcaster> static_broadcaster_;
-    ros::Timer timer_2000HZ_;
-    ros::Timer timer_500HZ_;
-    ros::Timer timer_10HZ_;
-    ros::Timer timer_1HZ_;
-    ros::Subscriber elevator_flag_sub_;
-    ros::Publisher ele_state_pub_;
+    lio_ros::Timer timer_2000HZ_;
+    lio_ros::Timer timer_500HZ_;
+    lio_ros::Timer timer_10HZ_;
+    lio_ros::Timer timer_1HZ_;
+    lio_ros::Subscription elevator_flag_sub_;
+    lio_ros::Publisher<lio_ros::Bool> ele_state_pub_;
 
-    void elevatorFlagCallback(const std_msgs::Bool::ConstPtr& msg);
+    void elevatorFlagCallback(const lio_ros::BoolConstPtr& msg);
 
     LidarPipeline lidar_pipeline_;
 };
 
 // Callback Function
-void pcl_cbk_custom(const lio::CustomMsgConstPtr& msg);
-void pcl_cbk_pc2(const sensor_msgs::PointCloud2::ConstPtr &msg);
-void imu_cbk(const sensor_msgs::ImuConstPtr& msg);
-void wheel_cbk(const lio::wheel_infoConstPtr& msg);
+void pcl_cbk_custom(const lio_ros::CustomMsgConstPtr& msg);
+void pcl_cbk_pc2(const lio_ros::PointCloud2ConstPtr &msg);
+void imu_cbk(const lio_ros::ImuConstPtr& msg);
+void wheel_cbk(const lio_ros::WheelInfoConstPtr& msg);
 
 void convert_traj_csv_to_tum();
 

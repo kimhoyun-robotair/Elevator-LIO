@@ -87,6 +87,7 @@ bool EXIT_FROM_ELEVATOR = false;
 bool ELEVATOR_TRIGGER = false;
 
 string current_tempdir_log;
+string package_share_path;
 
 #include "estimator/IMUProcess.h"
 IMUProcess imu_process;
@@ -95,36 +96,45 @@ ElevatorSelfExit ele_self_exit(imu_process.elev_process, p_eskf_estimator);
 
 /******************************** [M3] LIONode construction ********************************/
 
-LIONode::LIONode() : nh_("~"), lidar_pipeline_(nh_, shared_bufs, p_eskf_estimator, imu_process, ele_self_exit, ikd_map) {
+LIONode::LIONode(std::shared_ptr<lio_ros::Node> node)
+    : node_(std::move(node)),
+      lidar_pipeline_(*node_, shared_bufs, p_eskf_estimator, imu_process, ele_self_exit, ikd_map) {
     LOG_INFO(Core, "LIONode is running!");
     /****** Topic Publish ******/
-    clouds_lidar_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(clouds_lidar_topic_name, 10);
-    clouds_lidar_effect_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(clouds_lidar_effect_topic_name, 10);
-    clouds_lidar_reject_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(clouds_lidar_reject_topic_name, 10);
-    global_map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(global_map_topic_name, 10);
-    ikdtree_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(ikdtree_topic_name, 10);
+    clouds_lidar_pub_ = node_->advertise<lio_ros::PointCloud2>(clouds_lidar_topic_name, 10);
+    clouds_lidar_effect_pub_ = node_->advertise<lio_ros::PointCloud2>(clouds_lidar_effect_topic_name, 10);
+    clouds_lidar_reject_pub_ = node_->advertise<lio_ros::PointCloud2>(clouds_lidar_reject_topic_name, 10);
+    global_map_pub_ = node_->advertise<lio_ros::PointCloud2>(global_map_topic_name, 10);
+    ikdtree_pub_ = node_->advertise<lio_ros::PointCloud2>(ikdtree_topic_name, 10);
     /****** Transform Publish ******/
+#if LIO_ROS_VERSION == 1
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>();
     static_broadcaster_ = std::make_unique<tf2_ros::StaticTransformBroadcaster>();
+#else
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*node_->raw());
+    static_broadcaster_ = std::make_unique<tf2_ros::StaticTransformBroadcaster>(*node_->raw());
+#endif
     /****** Odometry Publish ******/
-    odom_imu_pub_ = nh_.advertise<nav_msgs::Odometry>(odom_imu_topic_name, 10);
-    odom_body_pub_ = nh_.advertise<nav_msgs::Odometry>(odom_vehicle_topic_name, 10);
-    odom_path_pub_ = nh_.advertise<nav_msgs::Path>("path_topic_name", 50);
+    odom_imu_pub_ = node_->advertise<lio_ros::Odometry>(odom_imu_topic_name, 10);
+    odom_body_pub_ = node_->advertise<lio_ros::Odometry>(odom_vehicle_topic_name, 10);
+    odom_path_pub_ = node_->advertise<lio_ros::Path>("path_topic_name", 50);
     /****** Topic Subscriber ******/
     pointcloud_sub_ = lidar_type == LidarType::Livox ?
-        nh_.subscribe(lidar_topic_name, 5000, pcl_cbk_custom):
-        nh_.subscribe(lidar_topic_name, 5000, pcl_cbk_pc2);
-    imu_sub_ = nh_.subscribe(imu_topic_name, 100000, imu_cbk);
-    wheel_sub_ = nh_.subscribe(wheel_topic_name, 5000, wheel_cbk);
+        node_->subscribe<lio_ros::CustomMsg>(lidar_topic_name, 5000, pcl_cbk_custom, true):
+        node_->subscribe<lio_ros::PointCloud2>(lidar_topic_name, 5000, pcl_cbk_pc2, true);
+    imu_sub_ = node_->subscribe<lio_ros::Imu>(imu_topic_name, 100000, imu_cbk, true);
+    wheel_sub_ = node_->subscribe<lio_ros::WheelInfo>(wheel_topic_name, 5000, wheel_cbk, true);
     /****** Timer ******/
-    timer_2000HZ_ = nh_.createTimer(ros::Rate(2000), &LIONode::timer_2000HZ_callback, this);
-    timer_500HZ_ = nh_.createTimer(ros::Rate(500), &LIONode::timer_500HZ_callback, this);
-    timer_10HZ_ = nh_.createTimer(ros::Rate(10), &LIONode::timer_10HZ_callback, this);
-    timer_1HZ_ = nh_.createTimer(ros::Rate(1), &LIONode::timer_1HZ_callback, this);
+    timer_2000HZ_ = node_->create_timer(2000.0, [this]() { timer_2000HZ_callback(); });
+    timer_500HZ_ = node_->create_timer(500.0, [this]() { timer_500HZ_callback(); });
+    timer_10HZ_ = node_->create_timer(10.0, [this]() { timer_10HZ_callback(); });
+    timer_1HZ_ = node_->create_timer(1.0, [this]() { timer_1HZ_callback(); });
     /****** Topic Subscriber (替代 Service) ******/
-    elevator_flag_sub_ = nh_.subscribe(elevator_flag_topic_name, 1, &LIONode::elevatorFlagCallback, this);
+    elevator_flag_sub_ = node_->subscribe<lio_ros::Bool>(
+        elevator_flag_topic_name, 1,
+        [this](const lio_ros::BoolConstPtr& msg) { elevatorFlagCallback(msg); });
     /****** Elevator Publish ******/
-    ele_state_pub_ = nh_.advertise<std_msgs::Bool>("/LIO/in_elevator", 1, true);
+    ele_state_pub_ = node_->advertise<lio_ros::Bool>("/LIO/in_elevator", 1, true);
 }
 
 
@@ -132,7 +142,7 @@ LIONode::LIONode() : nh_("~"), lidar_pipeline_(nh_, shared_bufs, p_eskf_estimato
 /******************************** [M4] Timer callbacks ********************************/
 
 /******** [M4.1] Low-rate publish timers ********/
-void LIONode::timer_1HZ_callback(const ros::TimerEvent& ) {
+void LIONode::timer_1HZ_callback() {
     /**** 发布静态tf ****/
     publishStaticTransform();
     /*** 发布全局地图 ***/
@@ -141,13 +151,13 @@ void LIONode::timer_1HZ_callback(const ros::TimerEvent& ) {
     publishIKDTree();
 }
 
-void LIONode::timer_10HZ_callback(const ros::TimerEvent& ) {
+void LIONode::timer_10HZ_callback() {
     /*** 留空备用 ***/
 }
 
 
 /******** [M4.2] LiDAR pipeline timer ********/
-void LIONode::timer_500HZ_callback(const ros::TimerEvent& ) {
+void LIONode::timer_500HZ_callback() {
     auto result = lidar_pipeline_.process();
 
     if (result.processed) {
@@ -175,7 +185,7 @@ void LIONode::timer_500HZ_callback(const ros::TimerEvent& ) {
 }
 
 /******************************** [M5] IMU pipeline timer ********************************/
-void LIONode::timer_2000HZ_callback(const ros::TimerEvent& )
+void LIONode::timer_2000HZ_callback()
 {
     switch(FSM::current_state) {
     case FSM::State::Initializing: {
@@ -189,7 +199,7 @@ void LIONode::timer_2000HZ_callback(const ros::TimerEvent& )
                 p_eskf_estimator -> mean_acc_ = mean_acc;
                 p_eskf_estimator -> mean_gyr_ = mean_gyr;
                 p_eskf_estimator -> set_cur_state(state);
-                imu_process.set_init_state(state,  msg->header.stamp.toSec());
+                imu_process.set_init_state(state, get_time_sec(msg->header.stamp));
                 FSM::dispatch(FSM::Event::InitEnd);
             }
             break;
@@ -198,7 +208,7 @@ void LIONode::timer_2000HZ_callback(const ros::TimerEvent& )
             if (! shared_bufs->isEmptySafe(shared_bufs->imu_buf)) {
                 ImuMsgConst msg = shared_bufs->getFrontSafe(shared_bufs->imu_buf);
                 imu_process.integration(msg, mean_acc);
-                lastest_imu_time = msg->header.stamp.toSec();
+                lastest_imu_time = get_time_sec(msg->header.stamp);
                 {
                     if (log_save_enable) {
                         static uint64_t raw_imu_seq = 0;
@@ -316,10 +326,10 @@ bool isSafeRelativeConfigPath(const std::filesystem::path &path) {
     return true;
 }
 
-void archiveActiveYamlConfigs(const std::string &package_root,
+void archiveActiveYamlConfigs(const std::string &package_share,
                               const std::string &root_config_file,
                               const std::string &session_dir) {
-    const std::filesystem::path yaml_root = std::filesystem::path(package_root) / "yaml";
+    const std::filesystem::path yaml_root = std::filesystem::path(package_share) / "yaml";
     const std::filesystem::path archive_root = std::filesystem::path(session_dir) / "yaml";
     const std::vector<std::string> active_configs = {
         root_config_file,
@@ -362,7 +372,7 @@ void archiveActiveYamlConfigs(const std::string &package_root,
 void SigHandle(int sig)
 {
     g_shutdown_signal = sig;
-    ros::shutdown();
+    lio_ros::shutdown();
 }
 
 /******************************** [M7] Program entry and shutdown persistence ********************************/
@@ -374,17 +384,27 @@ void shutdown_save_maps();
 int main(int argc, char** argv)
 {
     // 初始化 ROS 节点
-    ros::init(argc, argv, "lio_node");
+#if LIO_ROS_VERSION == 1
+    lio_ros::init(argc, argv, "lio_node");
+#else
+    lio_ros::init(argc, argv, "lio_node", false);
+#endif
     signal(SIGINT, SigHandle); // 关联SIGINT信号（通常是ctrl c）与自定义函数句柄 SigHandle
     signal(SIGTERM, SigHandle); // 关联SIGTERM信号（通常是ctrl c）与自定义函数句柄 SigHandle
 
     // 初始化
-    ros::NodeHandle nh("~");
-    ROS_INFO("Current NodeHandler namespace: %s", nh.getNamespace().c_str());
+    auto ros_node = std::make_shared<lio_ros::Node>("lio_node");
+    ROS_INFO("Current NodeHandler namespace: %s", ros_node->get_namespace().c_str());
+
+#if LIO_ROS_VERSION == 1
+    package_share_path = PACKAGE_ROOT_DIR;
+#else
+    package_share_path = lio_ros::package_share_directory("lio");
+#endif
 
     //读取配置文件路径
     std::string config_path;
-    nh.param("config_path", config_path, string("root_config.yaml"));
+    ros_node->param("config_path", config_path, string("root_config.yaml"));
     ROS_INFO("Config path: %s", config_path.c_str());
     load_root_yaml(config_path);
 
@@ -408,15 +428,15 @@ int main(int argc, char** argv)
     std::filesystem::create_directories(tempdir_pcd);
     current_tempdir_log = runtimeLogger().initializeSession(string(PACKAGE_ROOT_DIR));
     LOG_INFO(Core, "log session dir: " << current_tempdir_log);
-    archiveActiveYamlConfigs(string(PACKAGE_ROOT_DIR), config_path, current_tempdir_log);
+    archiveActiveYamlConfigs(package_share_path, config_path, current_tempdir_log);
 
     // 创建 LIONode 类型的节点
     //构造函数主要负责初始化 ROS 节点的各种发布器（Publisher）、订阅器（Subscriber）以及定时器（Timer）
-    LIONode node;
+    LIONode node(ros_node);
 
     // 启动并处理回调
     //ros::spin() 是 ROS 的主循环函数。  它会一直运行，直到节点被关闭（比如按下 Ctrl+C）。
-    ros::spin();
+    lio_ros::spin(*ros_node);
 
     /******** 下面的部分在按下 ctrl + c 后执行 *******/
     convert_traj_csv_to_tum();

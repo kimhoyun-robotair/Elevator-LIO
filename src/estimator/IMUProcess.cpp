@@ -248,7 +248,7 @@ void IMUProcess::integration(ImuMsgConst imu_msg, Eigen::Vector3d mean_acc) {
                              imu_msg->linear_acceleration.y,
                              imu_msg->linear_acceleration.z);
     if (G_SCALE_UP) cur_acc = cur_acc * G_m_s2;
-    double time_stamp = imu_msg->header.stamp.toSec();
+    double time_stamp = get_time_sec(imu_msg->header.stamp);
     integration(cur_acc, cur_gyr, time_stamp);
 }
 
