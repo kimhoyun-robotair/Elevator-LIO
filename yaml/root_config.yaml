@@ -3,7 +3,7 @@
 # Select one sensor, runtime and logging configuration.
 # Paths are relative to this yaml/ directory. The three files must not
 
-sensor_config: "sensors/livox.yaml"      # 传感器配置：雷达类型、外参、话题订阅
+sensor_config: "sensors/soslab.yaml"      # 传感器配置：雷达类型、外参、话题订阅
 #sensor_config: "sensors/ouster.yaml"     # ouster
 #sensor_config: "sensors/velodyne.yaml"   # velodyne
 #sensor_config: "sensors/xt32.yaml"       # xt32
