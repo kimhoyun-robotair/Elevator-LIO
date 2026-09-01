@@ -109,6 +109,18 @@ Unlike mainstream LIO systems, Elevator-LIO does not rely on an explicit measure
 
 ## 🛠️ Installation and Usage
 
+### Docker (amd64 / DGX Spark arm64)
+
+The same multi-architecture Docker setup builds Ubuntu 22.04, ROS 2 Humble, Livox-SDK2,
+Livox ROS Driver 2, Elevator-LIO, and RViz2 natively on amd64 Ubuntu laptops and arm64 DGX Spark.
+Host networking/IPC enables ROS 2 DDS and LiDAR UDP communication with the host; X11 enables the GUI.
+See the [Docker guide](docker/README.md) for MID-360, headless, Compose, and buildx usage.
+
+```bash
+./docker/run.sh build
+./docker/run.sh
+```
+
 ### Requirements
 
 The same source tree and `package.xml` support:

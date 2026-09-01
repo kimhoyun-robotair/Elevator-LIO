@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+build
+install
+log
+temp
+PCD
+docker/data
+docker/.xauth
+__pycache__
+*.bag
+*.db3
+*.mcap
+*.pcd
+*.pyc

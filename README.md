@@ -111,6 +111,18 @@ Elevator-LIO 的设计遵循开箱即用的原则，集成了许多便于使用�
 
 ## 🛠️ 安装与运行
 
+### Docker（amd64 / DGX Spark arm64）
+
+仓库提供同一个多架构 Docker 配置，在 amd64 Ubuntu 笔记本和 arm64 DGX Spark 上原生构建
+Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、Elevator-LIO 与 RViz2。
+容器使用 host network/IPC 与宿主机 ROS 2 和 LiDAR UDP 通信，并通过 X11 显示 GUI。
+快速开始及 MID-360、无界面运行和 buildx 用法见 [Docker 指南](docker/README.md)。
+
+```bash
+./docker/run.sh build
+./docker/run.sh
+```
+
 ### 环境要求
 
 当前代码使用同一套源码和 `package.xml` 支持：

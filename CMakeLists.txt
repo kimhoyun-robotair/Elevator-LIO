@@ -20,7 +20,10 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set(CMAKE_BUILD_RPATH "/usr/lib/x86_64-linux-gnu")
+# Resolve Debian multiarch library paths on both amd64 and arm64.
+if(CMAKE_LIBRARY_ARCHITECTURE)
+    set(CMAKE_BUILD_RPATH "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
+endif()
 
 find_package(OpenMP REQUIRED)
 find_package(OpenCV REQUIRED)
