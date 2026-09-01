@@ -100,6 +100,11 @@ RUN mkdir -p \
         /ros2_ws/src/elevator_lio/PCD \
         /ros2_ws/src/elevator_lio/PCD/Temp \
         /ros2_ws/src/elevator_lio/temp \
+    && chmod -R a+rwX \
+        /ros2_ws/build \
+        /ros2_ws/install \
+        /ros2_ws/log \
+        /ros2_ws/src \
     && install -m 0755 /ros2_ws/src/elevator_lio/docker/entrypoint.sh \
         /usr/local/bin/elevator-lio-entrypoint
 

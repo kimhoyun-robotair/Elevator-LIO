@@ -4,7 +4,6 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 IMAGE="${LIO_IMAGE:-elevator-lio:humble}"
-CONTAINER_NAME="${LIO_CONTAINER_NAME:-elevator-lio}"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 
 usage() {
@@ -46,6 +45,27 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
         "${REPO_ROOT}"
 fi
 
+default_launch=false
+if [[ $# -eq 0 ]]; then
+    default_launch=true
+fi
+
+if [[ -n "${LIO_CONTAINER_NAME:-}" ]]; then
+    CONTAINER_NAME="${LIO_CONTAINER_NAME}"
+elif [[ "${default_launch}" == "true" ]]; then
+    CONTAINER_NAME="elevator-lio"
+else
+    # Allow helper shells, rosbag playback, and topic inspection alongside the
+    # primary Elevator-LIO container without a name collision.
+    CONTAINER_NAME="elevator-lio-${$}"
+fi
+
+if [[ -n "${USE_RVIZ:-}" ]]; then
+    GUI_ENABLED="${USE_RVIZ}"
+else
+    GUI_ENABLED="${default_launch}"
+fi
+
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 HOST_USER="$(id -un)"
@@ -79,7 +99,7 @@ docker_args=(
 )
 
 cleanup_xhost=false
-if [[ "${USE_RVIZ:-true}" == "true" ]]; then
+if [[ "${GUI_ENABLED}" == "true" ]]; then
     if [[ -z "${DISPLAY:-}" ]]; then
         echo "DISPLAY is not set. Set USE_RVIZ=false for headless use." >&2
         exit 2
@@ -123,7 +143,8 @@ fi
 
 # DGX Spark normally has NVIDIA Container Toolkit. The algorithm itself is
 # CPU-only; this passthrough primarily accelerates RViz/OpenGL.
-if [[ "${LIO_NVIDIA_GPU:-auto}" != "0" ]] \
+if [[ "${GUI_ENABLED}" == "true" ]] \
+    && [[ "${LIO_NVIDIA_GPU:-auto}" != "0" ]] \
     && command -v nvidia-smi >/dev/null 2>&1 \
     && nvidia-smi >/dev/null 2>&1 \
     && docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q 'nvidia'; then
@@ -144,10 +165,10 @@ if [[ -n "${LIVOX_CONFIG_FILE:-}" ]]; then
     livox_config_path="/data/MID360_config.json"
 fi
 
-if [[ $# -eq 0 ]]; then
+if [[ "${default_launch}" == "true" ]]; then
     command=(
         ros2 launch lio docker_bringup.launch.py
-        "use_rviz:=${USE_RVIZ:-true}"
+        "use_rviz:=${GUI_ENABLED}"
         "use_livox_driver:=${USE_LIVOX_DRIVER:-false}"
         "config_path:=${LIO_CONFIG:-root_config.yaml}"
         "livox_config:=${livox_config_path}"
