@@ -11,6 +11,9 @@ __pycache__/
 src/ELE_TEST/bak
 temp
 !scripts/*
+!docker/*.sh
+docker/data/
+docker/.xauth
 .codex/
 .vscode/
 log/
