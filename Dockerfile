@@ -80,7 +80,6 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
         --from-paths src \
         --ignore-src \
         --rosdistro "${ROS_DISTRO}" \
-        --recursive \
         --yes \
     && colcon build \
         --merge-install \
