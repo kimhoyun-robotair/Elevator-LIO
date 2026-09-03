@@ -79,8 +79,8 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
     && rosdep install \
         --from-paths src \
         --ignore-src \
+        -y \
         --rosdistro "${ROS_DISTRO}" \
-        --yes \
     && colcon build \
         --merge-install \
         --parallel-workers "${BUILD_JOBS}" \
