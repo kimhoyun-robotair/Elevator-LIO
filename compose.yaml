@@ -23,6 +23,8 @@ services:
       # A custom JSON must live inside the mounted /data directory.
       LIVOX_CONFIG_FILE: ${LIVOX_CONFIG_CONTAINER_PATH:-}
       USE_ORBBEC_CAMERA: ${COMPOSE_USE_ORBBEC_CAMERA:-true}
+      ORBBEC_SERIAL_NUMBER: "${ORBBEC_SERIAL_NUMBER:-}"
+      ORBBEC_USB_PORT: "${ORBBEC_USB_PORT:-}"
       LIBGL_ALWAYS_SOFTWARE: ${LIBGL_ALWAYS_SOFTWARE:-0}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -46,8 +48,6 @@ services:
       - use_orbbec_camera:=${COMPOSE_USE_ORBBEC_CAMERA:-true}
       - config_path:=${LIO_CONFIG:-root_config.yaml}
       - camera_name:=${ORBBEC_CAMERA_NAME:-camera}
-      - camera_serial_number:=${ORBBEC_SERIAL_NUMBER:-}
-      - camera_usb_port:=${ORBBEC_USB_PORT:-}
       - camera_enable_color:=${ORBBEC_ENABLE_COLOR:-true}
       - camera_enable_depth:=${ORBBEC_ENABLE_DEPTH:-true}
       - camera_enable_point_cloud:=${ORBBEC_ENABLE_POINT_CLOUD:-true}

@@ -59,8 +59,16 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument("camera_name", default_value="camera"),
-            DeclareLaunchArgument("camera_serial_number", default_value=""),
-            DeclareLaunchArgument("camera_usb_port", default_value=""),
+            DeclareLaunchArgument(
+                "camera_serial_number",
+                default_value=EnvironmentVariable(
+                    "ORBBEC_SERIAL_NUMBER", default_value=""
+                ),
+            ),
+            DeclareLaunchArgument(
+                "camera_usb_port",
+                default_value=EnvironmentVariable("ORBBEC_USB_PORT", default_value=""),
+            ),
             DeclareLaunchArgument("camera_enable_color", default_value="true"),
             DeclareLaunchArgument("camera_enable_depth", default_value="true"),
             DeclareLaunchArgument("camera_enable_point_cloud", default_value="true"),
