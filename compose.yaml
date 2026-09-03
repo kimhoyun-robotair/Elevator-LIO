@@ -15,15 +15,25 @@ services:
       DISPLAY: ${DISPLAY:-}
       HOME: /tmp/lio-home
       QT_X11_NO_MITSHM: "1"
-      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-73}
       ROS_LOCALHOST_ONLY: ${ROS_LOCALHOST_ONLY:-0}
+      USE_LIVOX_DRIVER: ${USE_LIVOX_DRIVER:-true}
+      LIVOX_LIDAR_IP: ${LIVOX_LIDAR_IP:-}
+      LIVOX_HOST_IP: ${LIVOX_HOST_IP:-}
+      # A custom JSON must live inside the mounted /data directory.
+      LIVOX_CONFIG_FILE: ${LIVOX_CONFIG_CONTAINER_PATH:-}
+      USE_ORBBEC_CAMERA: ${COMPOSE_USE_ORBBEC_CAMERA:-true}
       LIBGL_ALWAYS_SOFTWARE: ${LIBGL_ALWAYS_SOFTWARE:-0}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/bus/usb:/dev/bus/usb:rw
       - ./yaml:/ros2_ws/install/share/lio/yaml:ro
       - ./PCD:/ros2_ws/src/elevator_lio/PCD:rw
       - ./temp:/ros2_ws/src/elevator_lio/temp:rw
       - ${LIO_DATA_DIR:-./docker/data}:/data:rw
+      - ${LIO_LOG_DIR:-./docker/log}:/tmp/lio-home/.ros/log:rw
+    device_cgroup_rules:
+      - "c 189:* rmw"
     stdin_open: true
     tty: true
     command:
@@ -32,6 +42,13 @@ services:
       - lio
       - docker_bringup.launch.py
       - use_rviz:=${USE_RVIZ:-true}
-      - use_livox_driver:=${USE_LIVOX_DRIVER:-false}
+      - use_livox_driver:=${USE_LIVOX_DRIVER:-true}
+      - use_orbbec_camera:=${COMPOSE_USE_ORBBEC_CAMERA:-true}
       - config_path:=${LIO_CONFIG:-root_config.yaml}
-      - livox_config:=${LIVOX_CONFIG_CONTAINER_PATH:-/ros2_ws/install/share/livox_ros_driver2/config/MID360_config.json}
+      - camera_name:=${ORBBEC_CAMERA_NAME:-camera}
+      - camera_serial_number:=${ORBBEC_SERIAL_NUMBER:-}
+      - camera_usb_port:=${ORBBEC_USB_PORT:-}
+      - camera_enable_color:=${ORBBEC_ENABLE_COLOR:-true}
+      - camera_enable_depth:=${ORBBEC_ENABLE_DEPTH:-true}
+      - camera_enable_point_cloud:=${ORBBEC_ENABLE_POINT_CLOUD:-true}
+      - camera_enable_imu:=${ORBBEC_ENABLE_IMU:-true}

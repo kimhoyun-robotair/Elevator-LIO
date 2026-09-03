@@ -9,13 +9,17 @@ ARG ROS_DISTRO
 ARG BUILD_JOBS=4
 ARG LIVOX_SDK2_REF=08f523c930b2f0ba1e98a6afaa8d7476bf479908
 ARG LIVOX_ROS_DRIVER2_REF=4a1def929e5b59c7a8122d19fce6efba581ce9f7
+ARG ORBBEC_ROS2_REF=ce08bce25f7a0a6fe939ece87ec945447109581f
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \
-    ROS_DOMAIN_ID=0 \
+    ROS_DOMAIN_ID=73 \
     ROS_LOCALHOST_ONLY=0 \
+    USE_LIVOX_DRIVER=true \
+    USE_ORBBEC_CAMERA=false \
+    LIVOX_CONFIG_PATH=/tmp/lio-home/MID360_config.json \
     QT_X11_NO_MITSHM=1 \
     LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
@@ -26,24 +30,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         cmake \
         git \
+        iproute2 \
         libapr1-dev \
         libasio-dev \
         libboost-all-dev \
+        libdw-dev \
         libeigen3-dev \
+        libgflags-dev \
         libgl1 \
         libgl1-mesa-dri \
+        libgoogle-glog-dev \
         libopencv-dev \
         libpcl-dev \
+        libssl-dev \
         libtbb-dev \
+        libusb-1.0-0-dev \
         libyaml-cpp-dev \
         mesa-utils \
         nlohmann-json3-dev \
         python3-colcon-common-extensions \
         python3-rosdep \
         qtbase5-dev \
+        usbutils \
         xauth \
         ros-${ROS_DISTRO}-desktop \
         ros-${ROS_DISTRO}-ament-cmake-auto \
+        ros-${ROS_DISTRO}-image-transport-plugins \
         ros-${ROS_DISTRO}-pcl-conversions \
         ros-${ROS_DISTRO}-pcl-ros \
     && rm -rf /var/lib/apt/lists/*
@@ -62,8 +74,8 @@ RUN git clone --filter=blob:none https://github.com/Livox-SDK/Livox-SDK2.git /tm
 
 WORKDIR /ros2_ws
 
-# The upstream driver stores ROS 1 and ROS 2 manifests side by side. Select the
-# ROS 2 files before rosdep/colcon inspect the workspace.
+# The upstream Livox driver stores ROS 1 and ROS 2 manifests side by side.
+# Select the ROS 2 files before rosdep/colcon inspect the workspace.
 RUN mkdir -p src \
     && git clone --filter=blob:none https://github.com/Livox-SDK/livox_ros_driver2.git \
         src/livox_ros_driver2 \
@@ -71,6 +83,13 @@ RUN mkdir -p src \
     && cp src/livox_ros_driver2/package_ROS2.xml src/livox_ros_driver2/package.xml \
     && rm -rf src/livox_ros_driver2/launch \
     && cp -a src/livox_ros_driver2/launch_ROS2 src/livox_ros_driver2/launch
+
+# OrbbecSDK ROS2 v2 contains native SDK libraries for both x86_64 and aarch64;
+# its CMake selects the matching directory at build time. Pin the exact release
+# commit so amd64 and DGX Spark builds remain reproducible.
+RUN git clone --filter=blob:none https://github.com/orbbec/OrbbecSDK_ROS2.git \
+        src/OrbbecSDK_ROS2 \
+    && git -C src/OrbbecSDK_ROS2 checkout --detach "${ORBBEC_ROS2_REF}"
 
 COPY . /ros2_ws/src/elevator_lio
 
@@ -109,7 +128,9 @@ RUN mkdir -p \
         /ros2_ws/log \
         /ros2_ws/src \
     && install -m 0755 /ros2_ws/src/elevator_lio/docker/entrypoint.sh \
-        /usr/local/bin/elevator-lio-entrypoint
+        /usr/local/bin/elevator-lio-entrypoint \
+    && install -m 0755 /ros2_ws/src/elevator_lio/docker/configure_livox.py \
+        /usr/local/bin/elevator-lio-configure-livox
 
 ENV DEBIAN_FRONTEND= \
     HOME=/tmp/lio-home

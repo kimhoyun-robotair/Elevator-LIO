@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import (
+    EnvironmentVariable,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -15,18 +19,52 @@ def generate_launch_description():
     use_livox_driver = LaunchConfiguration("use_livox_driver")
     livox_config = LaunchConfiguration("livox_config")
     frame_id = LaunchConfiguration("frame_id")
+    use_orbbec_camera = LaunchConfiguration("use_orbbec_camera")
+    camera_name = LaunchConfiguration("camera_name")
+    camera_serial_number = LaunchConfiguration("camera_serial_number")
+    camera_usb_port = LaunchConfiguration("camera_usb_port")
+    camera_enable_color = LaunchConfiguration("camera_enable_color")
+    camera_enable_depth = LaunchConfiguration("camera_enable_depth")
+    camera_enable_point_cloud = LaunchConfiguration("camera_enable_point_cloud")
+    camera_enable_imu = LaunchConfiguration("camera_enable_imu")
 
-    default_livox_config = (
-        get_package_share_directory("livox_ros_driver2") + "/config/MID360_config.json"
+    default_livox_config = EnvironmentVariable(
+        "LIVOX_CONFIG_FILE",
+        default_value="/tmp/lio-home/MID360_config.json",
+    )
+    orbbec_launch = PathJoinSubstitution(
+        [
+            FindPackageShare("orbbec_camera"),
+            "launch",
+            "gemini_330_series.launch.py",
+        ]
     )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("config_path", default_value="root_config.yaml"),
             DeclareLaunchArgument("use_rviz", default_value="true"),
-            DeclareLaunchArgument("use_livox_driver", default_value="false"),
+            DeclareLaunchArgument(
+                "use_livox_driver",
+                default_value=EnvironmentVariable(
+                    "USE_LIVOX_DRIVER", default_value="true"
+                ),
+            ),
             DeclareLaunchArgument("livox_config", default_value=default_livox_config),
             DeclareLaunchArgument("frame_id", default_value="livox_frame"),
+            DeclareLaunchArgument(
+                "use_orbbec_camera",
+                default_value=EnvironmentVariable(
+                    "USE_ORBBEC_CAMERA", default_value="false"
+                ),
+            ),
+            DeclareLaunchArgument("camera_name", default_value="camera"),
+            DeclareLaunchArgument("camera_serial_number", default_value=""),
+            DeclareLaunchArgument("camera_usb_port", default_value=""),
+            DeclareLaunchArgument("camera_enable_color", default_value="true"),
+            DeclareLaunchArgument("camera_enable_depth", default_value="true"),
+            DeclareLaunchArgument("camera_enable_point_cloud", default_value="true"),
+            DeclareLaunchArgument("camera_enable_imu", default_value="true"),
             Node(
                 package="livox_ros_driver2",
                 executable="livox_ros_driver2_node",
@@ -42,9 +80,23 @@ def generate_launch_description():
                         "output_data_type": 0,
                         "frame_id": frame_id,
                         "user_config_path": livox_config,
-                        "cmdline_input_bd_code": "livox0000000001",
                     }
                 ],
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(orbbec_launch),
+                condition=IfCondition(use_orbbec_camera),
+                launch_arguments={
+                    "camera_name": camera_name,
+                    "serial_number": camera_serial_number,
+                    "usb_port": camera_usb_port,
+                    "enable_color": camera_enable_color,
+                    "enable_depth": camera_enable_depth,
+                    "enable_point_cloud": camera_enable_point_cloud,
+                    "enable_accel": camera_enable_imu,
+                    "enable_gyro": camera_enable_imu,
+                    "enable_sync_output_accel_gyro": camera_enable_imu,
+                }.items(),
             ),
             Node(
                 package="lio",

@@ -1,0 +1,2 @@
+# Orbbec Gemini 336L (official VID:PID 2bc5:0807)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2bc5", ATTRS{idProduct}=="0807", MODE:="0666", OWNER:="root", GROUP:="video", SYMLINK+="Gemini_336L"

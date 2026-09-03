@@ -114,13 +114,15 @@ Elevator-LIO 的设计遵循开箱即用的原则，集成了许多便于使用�
 ### Docker（amd64 / DGX Spark arm64）
 
 仓库提供同一个多架构 Docker 配置，在 amd64 Ubuntu 笔记本和 arm64 DGX Spark 上原生构建
-Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、Elevator-LIO 与 RViz2。
-容器使用 host network/IPC 与宿主机 ROS 2 和 LiDAR UDP 通信，并通过 X11 显示 GUI。
-快速开始及 MID-360、无界面运行和 buildx 用法见 [Docker 指南](docker/README.md)。
+Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、OrbbecSDK ROS2、
+Elevator-LIO 与 RViz2。容器可直接驱动 Ethernet MID-360 和 USB Gemini 336L，使用 host
+network/IPC 和 X11；默认 ROS_DOMAIN_ID 为 73。传感器网络、udev 与完整用法见
+[Docker 指南](docker/README.md)。
 
 ```bash
 ./docker/run.sh build
-./docker/run.sh
+./docker/run.sh setup-camera
+LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 ```
 
 ### 环境要求
@@ -130,9 +132,9 @@ Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、Elevator-LIO 与
 - Ubuntu 20.04 + ROS 1 Noetic
 - Ubuntu 22.04 + ROS 2 Humble
 
-上述组合已在 x86_64 环境完成回归测试。核心源码不依赖 x86 专用指令，但 ARM64 尚未完成真机
-编译和运行验证；在 ARM64 上部署时，需要在目标设备上原生编译 Livox-SDK2、
-`livox_ros_driver2` 和 Elevator-LIO，不能复用 x86_64 预编译库。
+Docker 镜像已在 x86_64 与 DGX Spark arm64 上完成原生构建验证。Livox-SDK2、
+`livox_ros_driver2`、Orbbec ROS2 wrapper 和 Elevator-LIO 会针对目标架构构建；
+不同架构之间不能复用镜像内的二进制文件。
 
 OpenCV 目前只用于协方差矩阵和电梯状态曲线的调试窗口，默认配置中这些窗口均关闭；但源码和 CMake
 仍会包含并链接 OpenCV，您可以自行修改代码取消这些依赖。

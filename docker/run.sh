@@ -10,19 +10,84 @@ usage() {
     cat <<'EOF'
 Usage:
   ./docker/run.sh build                 Build for the current host architecture
-  ./docker/run.sh                       Launch Elevator-LIO and RViz2
-  ./docker/run.sh shell                 Open a sourced ROS 2 shell
+  ./docker/run.sh setup-camera          Install the Gemini 336L host udev rule
+  ./docker/run.sh                       Launch sensors, Elevator-LIO, and RViz2
+  ./docker/run.sh exec [command...]     Run inside the active elevator-lio container
+  ./docker/run.sh shell                 Open a temporary development container
   ./docker/run.sh <command> [args...]   Run any command in a temporary container
 
 Environment:
-  USE_RVIZ=false              Disable RViz2
-  USE_LIVOX_DRIVER=true       Start the MID-360 driver in the same container
-  LIVOX_CONFIG_FILE=/path     Mount a MID-360 JSON configuration
-  LIO_CONFIG=root_config.yaml Select a root YAML under this repository's yaml/
-  LIO_DATA_DIR=/path          Host directory mounted at /data
-  ROS_DOMAIN_ID=0             DDS domain shared with host ROS 2 processes
-  LIO_NVIDIA_GPU=0            Disable automatic NVIDIA GPU passthrough
+  USE_RVIZ=false                Disable RViz2
+  USE_LIVOX_DRIVER=false        Disable direct MID-360 driver (default: true)
+  LIVOX_LIDAR_IP=<address>       MID-360 address (required without custom JSON)
+  LIVOX_HOST_IP=<address>        LiDAR NIC address (default: auto-detect)
+  LIVOX_CONFIG_FILE=/path       Mount a complete custom MID-360 JSON instead
+  USE_ORBBEC_CAMERA=auto        Auto-start a connected Gemini 336L
+  ORBBEC_CAMERA_NAME=camera     Camera namespace
+  ORBBEC_SERIAL_NUMBER=...      Select one camera by serial number
+  ORBBEC_USB_PORT=...           Select one camera by USB topology path
+  ORBBEC_ENABLE_IMU=false       Disable the camera's synchronized IMU topic
+  ORBBEC_ENABLE_POINT_CLOUD=false  Disable the camera point cloud
+  ORBBEC_ENABLE_COLOR=false     Disable the camera color stream
+  ORBBEC_ENABLE_DEPTH=false     Disable the camera depth stream
+  LIO_CONFIG=root_config.yaml   Select a root YAML under this repository's yaml/
+  LIO_MOUNT_CONFIG=true         Mount host yaml/ for a custom launch command
+  LIO_DATA_DIR=/path            Host directory mounted at /data
+  LIO_LOG_DIR=/path             Persist ROS logs (default: docker/log)
+  ROS_DOMAIN_ID=73              DDS domain shared with host ROS 2 processes
+  ROS_LOCALHOST_ONLY=0          Allow non-loopback ROS 2 discovery
+  LIO_NVIDIA_GPU=0              Disable automatic NVIDIA GPU passthrough
 EOF
+}
+
+normalize_boolean() {
+    case "${1,,}" in
+        1|true|yes|on) echo true ;;
+        0|false|no|off) echo false ;;
+        *)
+            echo "Expected a boolean, got: $1" >&2
+            return 2
+            ;;
+    esac
+}
+
+gemini_336l_present() {
+    local vendor_file product_file
+    for vendor_file in /sys/bus/usb/devices/*/idVendor; do
+        [[ -r "${vendor_file}" ]] || continue
+        product_file="${vendor_file%/idVendor}/idProduct"
+        [[ -r "${product_file}" ]] || continue
+        if [[ "$(<"${vendor_file}")" == "2bc5" ]] \
+            && [[ "$(<"${product_file}")" == "0807" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+check_gemini_permissions() {
+    local vendor_file product_file device_dir bus_raw dev_raw bus dev device_node
+    for vendor_file in /sys/bus/usb/devices/*/idVendor; do
+        [[ -r "${vendor_file}" ]] || continue
+        device_dir="${vendor_file%/idVendor}"
+        product_file="${device_dir}/idProduct"
+        [[ -r "${product_file}" ]] || continue
+        if [[ "$(<"${vendor_file}")" != "2bc5" ]] \
+            || [[ "$(<"${product_file}")" != "0807" ]]; then
+            continue
+        fi
+        [[ -r "${device_dir}/busnum" && -r "${device_dir}/devnum" ]] || continue
+        bus_raw="$(<"${device_dir}/busnum")"
+        dev_raw="$(<"${device_dir}/devnum")"
+        printf -v bus '%03d' "$((10#${bus_raw}))"
+        printf -v dev '%03d' "$((10#${dev_raw}))"
+        device_node="/dev/bus/usb/${bus}/${dev}"
+        if [[ ! -r "${device_node}" || ! -w "${device_node}" ]]; then
+            echo "No read/write permission for Gemini 336L at ${device_node}." >&2
+            echo "Run './docker/run.sh setup-camera', reconnect the camera, and retry." >&2
+            return 2
+        fi
+    done
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -30,11 +95,47 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
+if [[ "${1:-}" == "setup-camera" ]]; then
+    exec "${SCRIPT_DIR}/setup_orbbec_udev.sh"
+fi
+
+if [[ "${1:-}" == "exec" ]]; then
+    shift
+    # Inherit the domain and discovery settings from the running container.
+    exec_args=()
+    if [[ -t 0 && -t 1 ]]; then
+        exec_args+=(--interactive --tty)
+    fi
+    if [[ $# -eq 0 ]]; then
+        set -- bash
+    fi
+    exec docker exec "${exec_args[@]}" \
+        "${LIO_CONTAINER_NAME:-elevator-lio}" \
+        bash -c \
+        'source "/opt/ros/${ROS_DISTRO:-humble}/setup.bash"; source /ros2_ws/install/setup.bash; exec "$@"' \
+        elevator-lio-exec "$@"
+fi
+
 if [[ "${1:-}" == "build" ]]; then
     exec docker build \
         --build-arg "BUILD_JOBS=${BUILD_JOBS}" \
         --tag "${IMAGE}" \
         "${REPO_ROOT}"
+fi
+
+if [[ $# -eq 0 ]]; then
+    early_livox_enabled="$(normalize_boolean "${USE_LIVOX_DRIVER:-true}")"
+    if [[ "${early_livox_enabled}" == "true" \
+        && -z "${LIVOX_CONFIG_FILE:-}" \
+        && -z "${LIVOX_LIDAR_IP:-}" ]]; then
+        echo "Direct MID-360 mode requires LIVOX_LIDAR_IP or LIVOX_CONFIG_FILE." >&2
+        echo "Example: LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh" >&2
+        exit 2
+    fi
+    if [[ -n "${LIVOX_CONFIG_FILE:-}" && ! -f "${LIVOX_CONFIG_FILE}" ]]; then
+        echo "LIVOX_CONFIG_FILE does not exist: ${LIVOX_CONFIG_FILE}" >&2
+        exit 2
+    fi
 fi
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
@@ -61,24 +162,60 @@ else
 fi
 
 if [[ -n "${USE_RVIZ:-}" ]]; then
-    GUI_ENABLED="${USE_RVIZ}"
+    GUI_ENABLED="$(normalize_boolean "${USE_RVIZ}")"
 else
     GUI_ENABLED="${default_launch}"
+fi
+
+if [[ -n "${USE_LIVOX_DRIVER:-}" ]]; then
+    LIVOX_ENABLED="$(normalize_boolean "${USE_LIVOX_DRIVER}")"
+else
+    LIVOX_ENABLED="${default_launch}"
+fi
+
+ORBBEC_REQUEST="${USE_ORBBEC_CAMERA:-auto}"
+LIVOX_LAUNCH_CONFIG=""
+if [[ "${ORBBEC_REQUEST,,}" != "auto" ]]; then
+    ORBBEC_ENABLED="$(normalize_boolean "${ORBBEC_REQUEST}")"
+elif [[ "${default_launch}" == "true" ]] && gemini_336l_present; then
+    ORBBEC_ENABLED=true
+else
+    ORBBEC_ENABLED=false
+fi
+
+# Keep wrapper resources aligned when a caller supplies launch arguments to a
+# custom command instead of using the environment variables above.
+if [[ "${default_launch}" == "false" ]]; then
+    for argument in "$@"; do
+        case "${argument}" in
+            use_rviz:=*)
+                GUI_ENABLED="$(normalize_boolean "${argument#use_rviz:=}")"
+                ;;
+            use_livox_driver:=*)
+                LIVOX_ENABLED="$(normalize_boolean "${argument#use_livox_driver:=}")"
+                ;;
+            use_orbbec_camera:=*)
+                ORBBEC_ENABLED="$(normalize_boolean "${argument#use_orbbec_camera:=}")"
+                ;;
+            livox_config:=*)
+                LIVOX_LAUNCH_CONFIG="${argument#livox_config:=}"
+                ;;
+        esac
+    done
 fi
 
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 HOST_USER="$(id -un)"
 DATA_DIR="${LIO_DATA_DIR:-${REPO_ROOT}/docker/data}"
+LOG_DIR="${LIO_LOG_DIR:-${REPO_ROOT}/docker/log}"
 PCD_DIR="${LIO_PCD_DIR:-${REPO_ROOT}/PCD}"
 TEMP_DIR="${LIO_TEMP_DIR:-${REPO_ROOT}/temp}"
 
-mkdir -p "${DATA_DIR}" "${PCD_DIR}/Temp" "${TEMP_DIR}"
+mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${PCD_DIR}/Temp" "${TEMP_DIR}"
 
 docker_args=(
     --rm
-    --interactive
-    --tty
     --init
     --name "${CONTAINER_NAME}"
     --network host
@@ -87,16 +224,35 @@ docker_args=(
     --env "HOME=/tmp/lio-home"
     --env "USER=${HOST_USER}"
     --env "LOGNAME=${HOST_USER}"
-    --env "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}"
+    --env "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-73}"
     --env "ROS_LOCALHOST_ONLY=${ROS_LOCALHOST_ONLY:-0}"
+    --env "USE_LIVOX_DRIVER=${LIVOX_ENABLED}"
+    --env "LIVOX_LIDAR_IP=${LIVOX_LIDAR_IP:-}"
+    --env "LIVOX_HOST_IP=${LIVOX_HOST_IP:-}"
+    --env "USE_ORBBEC_CAMERA=${ORBBEC_ENABLED}"
     --env "QT_X11_NO_MITSHM=1"
     --env "LIBGL_ALWAYS_SOFTWARE=${LIBGL_ALWAYS_SOFTWARE:-0}"
-    --volume "${REPO_ROOT}/yaml:/ros2_ws/install/share/lio/yaml:ro"
     --volume "${PCD_DIR}:/ros2_ws/src/elevator_lio/PCD:rw"
     --volume "${TEMP_DIR}:/ros2_ws/src/elevator_lio/temp:rw"
     --volume "${DATA_DIR}:/data:rw"
+    --volume "${LOG_DIR}:/tmp/lio-home/.ros/log:rw"
     --workdir /ros2_ws
 )
+
+if [[ -t 0 && -t 1 ]]; then
+    docker_args+=(--interactive --tty)
+fi
+
+if [[ -n "${LIO_MOUNT_CONFIG:-}" ]]; then
+    MOUNT_CONFIG="$(normalize_boolean "${LIO_MOUNT_CONFIG}")"
+else
+    MOUNT_CONFIG="${default_launch}"
+fi
+if [[ "${MOUNT_CONFIG}" == "true" ]]; then
+    docker_args+=(
+        --volume "${REPO_ROOT}/yaml:/ros2_ws/install/share/lio/yaml:ro"
+    )
+fi
 
 cleanup_xhost=false
 if [[ "${GUI_ENABLED}" == "true" ]]; then
@@ -155,23 +311,56 @@ if [[ "${GUI_ENABLED}" == "true" ]] \
     )
 fi
 
-livox_config_path="/ros2_ws/install/share/livox_ros_driver2/config/MID360_config.json"
+# libuvc accesses the USB bus directly. The cgroup rule also permits a camera
+# that is reconnected after the container has started, without --privileged.
+if [[ "${ORBBEC_ENABLED}" == "true" ]]; then
+    if [[ ! -d /dev/bus/usb ]]; then
+        echo "/dev/bus/usb is unavailable; cannot pass Gemini 336L through." >&2
+        exit 2
+    fi
+    check_gemini_permissions
+    docker_args+=(
+        --mount type=bind,src=/dev/bus/usb,dst=/dev/bus/usb
+        --device-cgroup-rule "c 189:* rmw"
+    )
+fi
+
 if [[ -n "${LIVOX_CONFIG_FILE:-}" ]]; then
     if [[ ! -f "${LIVOX_CONFIG_FILE}" ]]; then
         echo "LIVOX_CONFIG_FILE does not exist: ${LIVOX_CONFIG_FILE}" >&2
         exit 2
     fi
-    docker_args+=(--volume "$(realpath "${LIVOX_CONFIG_FILE}"):/data/MID360_config.json:ro")
-    livox_config_path="/data/MID360_config.json"
+    docker_args+=(
+        --volume "$(realpath "${LIVOX_CONFIG_FILE}"):/data/MID360_config.json:ro"
+        --env "LIVOX_CONFIG_FILE=/data/MID360_config.json"
+    )
+elif [[ -n "${LIVOX_LAUNCH_CONFIG}" ]]; then
+    docker_args+=(--env "LIVOX_CONFIG_FILE=${LIVOX_LAUNCH_CONFIG}")
+else
+    docker_args+=(--env "LIVOX_CONFIG_FILE=")
+fi
+
+if [[ "${default_launch}" == "true" ]]; then
+    echo "[INFO] ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-73}, MID-360=${LIVOX_ENABLED}, Gemini 336L=${ORBBEC_ENABLED}"
+    if [[ "${ORBBEC_REQUEST,,}" == "auto" && "${ORBBEC_ENABLED}" == "false" ]]; then
+        echo "[INFO] Gemini 336L (USB 2bc5:0807) was not detected; camera driver is disabled."
+    fi
 fi
 
 if [[ "${default_launch}" == "true" ]]; then
     command=(
         ros2 launch lio docker_bringup.launch.py
         "use_rviz:=${GUI_ENABLED}"
-        "use_livox_driver:=${USE_LIVOX_DRIVER:-false}"
+        "use_livox_driver:=${LIVOX_ENABLED}"
+        "use_orbbec_camera:=${ORBBEC_ENABLED}"
         "config_path:=${LIO_CONFIG:-root_config.yaml}"
-        "livox_config:=${livox_config_path}"
+        "camera_name:=${ORBBEC_CAMERA_NAME:-camera}"
+        "camera_serial_number:=${ORBBEC_SERIAL_NUMBER:-}"
+        "camera_usb_port:=${ORBBEC_USB_PORT:-}"
+        "camera_enable_color:=${ORBBEC_ENABLE_COLOR:-true}"
+        "camera_enable_depth:=${ORBBEC_ENABLE_DEPTH:-true}"
+        "camera_enable_point_cloud:=${ORBBEC_ENABLE_POINT_CLOUD:-true}"
+        "camera_enable_imu:=${ORBBEC_ENABLE_IMU:-true}"
     )
 elif [[ "$1" == "shell" ]]; then
     command=(bash)

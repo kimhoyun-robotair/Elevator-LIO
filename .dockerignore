@@ -8,6 +8,7 @@ log
 temp
 PCD
 docker/data
+docker/log
 docker/.xauth
 __pycache__
 *.bag
