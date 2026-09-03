@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 ARG ROS_DISTRO=humble
-FROM ros:${ROS_DISTRO}-desktop
+# Docker Official Images do not publish a Humble `desktop` tag. Start from the
+# multi-architecture ros-base image and install the desktop metapackage below.
+FROM ros:${ROS_DISTRO}-ros-base-jammy
 
 ARG ROS_DISTRO
 ARG BUILD_JOBS=4
@@ -40,10 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-rosdep \
         qtbase5-dev \
         xauth \
+        ros-${ROS_DISTRO}-desktop \
         ros-${ROS_DISTRO}-ament-cmake-auto \
         ros-${ROS_DISTRO}-pcl-conversions \
         ros-${ROS_DISTRO}-pcl-ros \
-        ros-${ROS_DISTRO}-rviz2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Build Livox SDK2 natively for the image architecture. This is important on
