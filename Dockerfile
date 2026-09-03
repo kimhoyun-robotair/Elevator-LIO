@@ -76,11 +76,13 @@ COPY . /ros2_ws/src/elevator_lio
 
 RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
     && rosdep update --rosdistro "${ROS_DISTRO}" \
+    && apt-get update \
     && rosdep install \
         --from-paths src \
         --ignore-src \
         -y \
         --rosdistro "${ROS_DISTRO}" \
+    && rm -rf /var/lib/apt/lists/* \
     && colcon build \
         --merge-install \
         --parallel-workers "${BUILD_JOBS}" \
