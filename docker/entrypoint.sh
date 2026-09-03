@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# ROS/ament setup scripts intentionally probe optional variables without
+# nounset-safe expansions. Disable nounset only while sourcing them, then
+# restore strict mode for the rest of this entrypoint.
+set +u
 source "/opt/ros/${ROS_DISTRO:-humble}/setup.bash"
 source /ros2_ws/install/setup.bash
+set -u
 
 mkdir -p "${HOME:-/tmp/lio-home}"
 
