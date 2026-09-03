@@ -113,12 +113,13 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
 
 RUN mkdir -p \
         /data \
-        /tmp/lio-home \
+        /tmp/lio-home/.ros \
         /ros2_ws/src/elevator_lio/PCD/Temp \
         /ros2_ws/src/elevator_lio/temp \
     && chmod 1777 \
         /data \
         /tmp/lio-home \
+        /tmp/lio-home/.ros \
         /ros2_ws/src/elevator_lio/PCD \
         /ros2_ws/src/elevator_lio/PCD/Temp \
         /ros2_ws/src/elevator_lio/temp \

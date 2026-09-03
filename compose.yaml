@@ -31,7 +31,7 @@ services:
       - ./PCD:/ros2_ws/src/elevator_lio/PCD:rw
       - ./temp:/ros2_ws/src/elevator_lio/temp:rw
       - ${LIO_DATA_DIR:-./docker/data}:/data:rw
-      - ${LIO_LOG_DIR:-./docker/log}:/tmp/lio-home/.ros/log:rw
+      - ${LIO_LOG_DIR:-./docker/log}:/tmp/lio-home/.ros:rw
     device_cgroup_rules:
       - "c 189:* rmw"
     stdin_open: true

@@ -33,7 +33,7 @@ Environment:
   LIO_CONFIG=root_config.yaml   Select a root YAML under this repository's yaml/
   LIO_MOUNT_CONFIG=true         Mount host yaml/ for a custom launch command
   LIO_DATA_DIR=/path            Host directory mounted at /data
-  LIO_LOG_DIR=/path             Persist ROS logs (default: docker/log)
+  LIO_LOG_DIR=/path             Persist ROS state/logs (default: docker/log)
   ROS_DOMAIN_ID=73              DDS domain shared with host ROS 2 processes
   ROS_LOCALHOST_ONLY=0          Allow non-loopback ROS 2 discovery
   LIO_NVIDIA_GPU=0              Disable automatic NVIDIA GPU passthrough
@@ -235,7 +235,7 @@ docker_args=(
     --volume "${PCD_DIR}:/ros2_ws/src/elevator_lio/PCD:rw"
     --volume "${TEMP_DIR}:/ros2_ws/src/elevator_lio/temp:rw"
     --volume "${DATA_DIR}:/data:rw"
-    --volume "${LOG_DIR}:/tmp/lio-home/.ros/log:rw"
+    --volume "${LOG_DIR}:/tmp/lio-home/.ros:rw"
     --workdir /ros2_ws
 )
 

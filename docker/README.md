@@ -147,6 +147,11 @@ ROS_DOMAIN_ID=73 LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 ./docker/run.sh exec ros2 topic list
 ./docker/run.sh exec ros2 topic info -v /livox/lidar
 ./docker/run.sh exec ros2 topic info -v /camera/depth/image_raw
+
+# 아래 명령에서 주기 값이 계속 출력되어야 실제 센서 데이터가 들어오는 것입니다(Ctrl-C로 종료).
+./docker/run.sh exec ros2 topic hz /livox/lidar
+./docker/run.sh exec ros2 topic hz /livox/imu
+./docker/run.sh exec ros2 topic hz /camera/depth/image_raw
 ```
 
 호스트의 ROS CLI domain을 바꾼 뒤 이전 graph가 보이면 `ros2 daemon stop`을 실행하고 다시
@@ -160,17 +165,19 @@ LIVOX_LIDAR_IP=192.168.1.112 USE_RVIZ=false ./docker/run.sh
 ./docker/run.sh exec
 # 별도의 일회성 개발 컨테이너
 ./docker/run.sh shell
+colcon build --merge-install --parallel-workers "${BUILD_JOBS:-4}"
 ```
 
 `shell`은 `--rm` 개발 컨테이너이므로 그 안에서 만든 build/install 결과는 종료 시 사라집니다.
-대신 이 모드에서는 설치된 YAML을 read-only mount하지 않으므로 `/ros2_ws`에서 `colcon build`를
-다시 실행할 수 있습니다. 지속할 소스 변경은 호스트 저장소에서 수정한 뒤 이미지를 재빌드하십시오.
+대신 이 모드에서는 설치된 YAML을 read-only mount하지 않으므로 `/ros2_ws`에서 위와 같이
+`--merge-install` 레이아웃으로 다시 빌드할 수 있습니다. 지속할 소스 변경은 호스트 저장소에서
+수정한 뒤 이미지를 재빌드하십시오.
 
 - 호스트 `yaml/`은 설치된 LIO 설정 디렉터리에 read-only로 연결됩니다.
 - `LIO_CONFIG=my_root.yaml`로 `yaml/` 아래의 다른 root 설정을 선택합니다.
 - `PCD/`와 `temp/` 결과는 호스트에 보존됩니다.
 - `docker/data/`는 rosbag과 센서 설정용 `/data` 볼륨입니다.
-- ROS 로그는 기본적으로 호스트 `docker/log/`에 보존됩니다.
+- ROS CLI 상태와 ROS/Orbbec 로그는 기본적으로 호스트 `docker/log/` 아래에 보존됩니다.
 - DGX GPU는 LIO 계산이 아니라 RViz/OpenGL 가속에만 선택적으로 사용됩니다.
 
 ## Docker Compose
