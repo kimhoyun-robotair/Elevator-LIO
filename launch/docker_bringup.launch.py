@@ -6,7 +6,6 @@ from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -36,11 +35,11 @@ def generate_launch_description():
                 condition=IfCondition(use_livox_driver),
                 parameters=[
                     {
-                        "xfer_format": ParameterValue("1", value_type=int),
-                        "multi_topic": ParameterValue("0", value_type=int),
-                        "data_src": ParameterValue("0", value_type=int),
-                        "publish_freq": ParameterValue("10.0", value_type=float),
-                        "output_data_type": ParameterValue("0", value_type=int),
+                        "xfer_format": 1,
+                        "multi_topic": 0,
+                        "data_src": 0,
+                        "publish_freq": 10.0,
+                        "output_data_type": 0,
                         "frame_id": frame_id,
                         "user_config_path": livox_config,
                         "cmdline_input_bd_code": "livox0000000001",
