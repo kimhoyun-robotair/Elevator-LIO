@@ -25,6 +25,13 @@ services:
       USE_ORBBEC_CAMERA: ${COMPOSE_USE_ORBBEC_CAMERA:-true}
       ORBBEC_SERIAL_NUMBER: "${ORBBEC_SERIAL_NUMBER:-}"
       ORBBEC_USB_PORT: "${ORBBEC_USB_PORT:-}"
+      ORBBEC_CAMERA_COUNT: "${ORBBEC_CAMERA_COUNT:-1}"
+      ORBBEC_SERIAL_NUMBER_2: "${ORBBEC_SERIAL_NUMBER_2:-}"
+      ORBBEC_SERIAL_NUMBER_3: "${ORBBEC_SERIAL_NUMBER_3:-}"
+      ORBBEC_CAMERA_NAME_2: "${ORBBEC_CAMERA_NAME_2:-camera_2}"
+      ORBBEC_CAMERA_NAME_3: "${ORBBEC_CAMERA_NAME_3:-camera_3}"
+      # Enable GX5 only with docker/compose.gx5.yaml, which maps both ports.
+      USE_GX5_DRIVER: "false"
       LIBGL_ALWAYS_SOFTWARE: ${LIBGL_ALWAYS_SOFTWARE:-0}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw

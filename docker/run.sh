@@ -17,6 +17,7 @@ Usage:
   ./docker/run.sh <command> [args...]   Run any command in a temporary container
 
 Environment:
+  LIO_SENSOR_ENV_FILE=/path     Load settings (default: docker/sensors.env if present)
   USE_RVIZ=false                Disable RViz2
   USE_LIVOX_DRIVER=false        Disable direct MID-360 driver (default: true)
   LIVOX_LIDAR_IP=<address>       MID-360 address (required without custom JSON)
@@ -24,12 +25,18 @@ Environment:
   LIVOX_CONFIG_FILE=/path       Mount a complete custom MID-360 JSON instead
   USE_ORBBEC_CAMERA=auto        Auto-start a connected Gemini 336L
   ORBBEC_CAMERA_NAME=camera     Camera namespace
+  ORBBEC_CAMERA_COUNT=1         Number of cameras (1-3); multi-camera needs all serials
   ORBBEC_SERIAL_NUMBER=...      Select one camera by serial number
+  ORBBEC_SERIAL_NUMBER_2=...    Second Gemini 336L serial (namespace: camera_2)
+  ORBBEC_SERIAL_NUMBER_3=...    Third Gemini 336L serial (namespace: camera_3)
   ORBBEC_USB_PORT=...           Select one camera by USB topology path
   ORBBEC_ENABLE_IMU=false       Disable the camera's synchronized IMU topic
   ORBBEC_ENABLE_POINT_CLOUD=false  Disable the camera point cloud
   ORBBEC_ENABLE_COLOR=false     Disable the camera color stream
   ORBBEC_ENABLE_DEPTH=false     Disable the camera depth stream
+  USE_GX5_DRIVER=auto           Start two GX5-AHRS units when their ports are configured
+  GX5_PORT_1=/dev/serial/by-id/...  First GX5 host port (namespace: gx5_1)
+  GX5_PORT_2=/dev/serial/by-id/...  Second GX5 host port (namespace: gx5_2)
   LIO_CONFIG=root_config.yaml   Select a root YAML under this repository's yaml/
   LIO_MOUNT_CONFIG=true         Mount host yaml/ for a custom launch command
   LIO_DATA_DIR=/path            Host directory mounted at /data
@@ -123,6 +130,18 @@ if [[ "${1:-}" == "build" ]]; then
         "${REPO_ROOT}"
 fi
 
+# Local sensor identities stay outside Git and the image. The example uses
+# default assignments so an environment variable can still override a setting.
+sensor_env="${LIO_SENSOR_ENV_FILE:-${SCRIPT_DIR}/sensors.env}"
+if [[ -f "${sensor_env}" ]]; then
+    set -a
+    source "${sensor_env}"
+    set +a
+elif [[ -n "${LIO_SENSOR_ENV_FILE:-}" ]]; then
+    echo "LIO_SENSOR_ENV_FILE does not exist: ${sensor_env}" >&2
+    exit 2
+fi
+
 if [[ $# -eq 0 ]]; then
     early_livox_enabled="$(normalize_boolean "${USE_LIVOX_DRIVER:-true}")"
     if [[ "${early_livox_enabled}" == "true" \
@@ -183,6 +202,16 @@ else
     ORBBEC_ENABLED=false
 fi
 
+GX5_REQUEST="${USE_GX5_DRIVER:-auto}"
+if [[ "${GX5_REQUEST,,}" != "auto" ]]; then
+    GX5_ENABLED="$(normalize_boolean "${GX5_REQUEST}")"
+elif [[ "${default_launch}" == "true" \
+    && ( -n "${GX5_PORT_1:-}" || -n "${GX5_PORT_2:-}" ) ]]; then
+    GX5_ENABLED=true
+else
+    GX5_ENABLED=false
+fi
+
 # Keep wrapper resources aligned when a caller supplies launch arguments to a
 # custom command instead of using the environment variables above.
 if [[ "${default_launch}" == "false" ]]; then
@@ -196,6 +225,9 @@ if [[ "${default_launch}" == "false" ]]; then
                 ;;
             use_orbbec_camera:=*)
                 ORBBEC_ENABLED="$(normalize_boolean "${argument#use_orbbec_camera:=}")"
+                ;;
+            use_gx5_driver:=*)
+                GX5_ENABLED="$(normalize_boolean "${argument#use_gx5_driver:=}")"
                 ;;
             livox_config:=*)
                 LIVOX_LAUNCH_CONFIG="${argument#livox_config:=}"
@@ -232,6 +264,12 @@ docker_args=(
     --env "USE_ORBBEC_CAMERA=${ORBBEC_ENABLED}"
     --env "ORBBEC_SERIAL_NUMBER=${ORBBEC_SERIAL_NUMBER:-}"
     --env "ORBBEC_USB_PORT=${ORBBEC_USB_PORT:-}"
+    --env "ORBBEC_CAMERA_COUNT=${ORBBEC_CAMERA_COUNT:-1}"
+    --env "ORBBEC_SERIAL_NUMBER_2=${ORBBEC_SERIAL_NUMBER_2:-}"
+    --env "ORBBEC_SERIAL_NUMBER_3=${ORBBEC_SERIAL_NUMBER_3:-}"
+    --env "ORBBEC_CAMERA_NAME_2=${ORBBEC_CAMERA_NAME_2:-camera_2}"
+    --env "ORBBEC_CAMERA_NAME_3=${ORBBEC_CAMERA_NAME_3:-camera_3}"
+    --env "USE_GX5_DRIVER=${GX5_ENABLED}"
     --env "QT_X11_NO_MITSHM=1"
     --env "LIBGL_ALWAYS_SOFTWARE=${LIBGL_ALWAYS_SOFTWARE:-0}"
     --volume "${PCD_DIR}:/ros2_ws/src/elevator_lio/PCD:rw"
@@ -327,6 +365,32 @@ if [[ "${ORBBEC_ENABLED}" == "true" ]]; then
     )
 fi
 
+# Resolve persistent host identities once and expose two predictable paths.
+# --device grants only these serial devices; supplementary numeric groups
+# preserve access for the existing non-root container user.
+if [[ "${GX5_ENABLED}" == "true" ]]; then
+    gx5_devices=()
+    for index in 1 2; do
+        port_variable="GX5_PORT_${index}"
+        host_port="${!port_variable:-}"
+        if [[ -z "${host_port}" || ! -c "${host_port}" ]]; then
+            echo "Set ${port_variable} to the GX5 character device under /dev/serial/by-id/ in docker/sensors.env." >&2
+            exit 2
+        fi
+        host_port="$(realpath "${host_port}")"
+        device_identity="$(stat -Lc '%t:%T' "${host_port}")"
+        if [[ "${index}" == "2" && "${device_identity}" == "${gx5_devices[0]}" ]]; then
+            echo "GX5_PORT_1 and GX5_PORT_2 refer to the same device; select two different units." >&2
+            exit 2
+        fi
+        gx5_devices+=("${device_identity}")
+        docker_args+=(
+            --device "${host_port}:/dev/gx5_${index}:rw"
+            --group-add "$(stat -Lc '%g' "${host_port}")"
+        )
+    done
+fi
+
 if [[ -n "${LIVOX_CONFIG_FILE:-}" ]]; then
     if [[ ! -f "${LIVOX_CONFIG_FILE}" ]]; then
         echo "LIVOX_CONFIG_FILE does not exist: ${LIVOX_CONFIG_FILE}" >&2
@@ -343,7 +407,7 @@ else
 fi
 
 if [[ "${default_launch}" == "true" ]]; then
-    echo "[INFO] ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-73}, MID-360=${LIVOX_ENABLED}, Gemini 336L=${ORBBEC_ENABLED}"
+    echo "[INFO] ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-73}, MID-360=${LIVOX_ENABLED}, Gemini 336L=${ORBBEC_ENABLED} (count=${ORBBEC_CAMERA_COUNT:-1}), GX5 x2=${GX5_ENABLED}"
     if [[ "${ORBBEC_REQUEST,,}" == "auto" && "${ORBBEC_ENABLED}" == "false" ]]; then
         echo "[INFO] Gemini 336L (USB 2bc5:0807) was not detected; camera driver is disabled."
     fi
@@ -355,6 +419,7 @@ if [[ "${default_launch}" == "true" ]]; then
         "use_rviz:=${GUI_ENABLED}"
         "use_livox_driver:=${LIVOX_ENABLED}"
         "use_orbbec_camera:=${ORBBEC_ENABLED}"
+        "use_gx5_driver:=${GX5_ENABLED}"
         "config_path:=${LIO_CONFIG:-root_config.yaml}"
         "camera_name:=${ORBBEC_CAMERA_NAME:-camera}"
         "camera_enable_color:=${ORBBEC_ENABLE_COLOR:-true}"

@@ -13,6 +13,7 @@ temp
 !scripts/*
 !docker/*.sh
 docker/data/
+docker/sensors.env
 docker/.xauth
 .codex/
 .vscode/

@@ -1,0 +1,11 @@
+# Optional overlay: docker compose -f compose.yaml -f docker/compose.gx5.yaml up
+services:
+  elevator-lio:
+    environment:
+      USE_GX5_DRIVER: "true"
+    devices:
+      - "${GX5_PORT_1:?Set GX5_PORT_1 in docker/sensors.env}:/dev/gx5_1:rw"
+      - "${GX5_PORT_2:?Set GX5_PORT_2 in docker/sensors.env}:/dev/gx5_2:rw"
+    group_add:
+      - "${GX5_GID_1:?Export GX5_GID_1 using stat -Lc %g on GX5_PORT_1}"
+      - "${GX5_GID_2:?Export GX5_GID_2 using stat -Lc %g on GX5_PORT_2}"

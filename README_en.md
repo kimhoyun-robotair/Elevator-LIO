@@ -112,10 +112,13 @@ Unlike mainstream LIO systems, Elevator-LIO does not rely on an explicit measure
 ### Docker (amd64 / DGX Spark arm64)
 
 The same multi-architecture Docker setup builds Ubuntu 22.04, ROS 2 Humble, Livox-SDK2,
-Livox ROS Driver 2, OrbbecSDK ROS2, Elevator-LIO, and RViz2 natively on amd64 Ubuntu laptops
-and arm64 DGX Spark. It directly drives an Ethernet MID-360 and USB Gemini 336L, uses host
+Livox ROS Driver 2, OrbbecSDK ROS2, MicroStrain ROS2, Elevator-LIO, and RViz2 on amd64 Ubuntu laptops
+and arm64 DGX Spark. It drives an Ethernet MID-360, up to three USB Gemini 336L cameras,
+and two USB 3DM-GX5-AHRS units in the same container, uses host
 networking/IPC and X11, and defaults to ROS_DOMAIN_ID 73. See the
 [Docker guide](docker/README.md) for sensor networking, udev, Compose, and buildx usage.
+Copy `docker/sensors.env.example` to `docker/sensors.env` and fill in the three camera
+serials, two AHRS device paths, and LiDAR IP to start all sensors with `./docker/run.sh`.
 
 ```bash
 ./docker/run.sh build
@@ -130,8 +133,9 @@ The same source tree and `package.xml` support:
 - Ubuntu 20.04 + ROS 1 Noetic
 - Ubuntu 22.04 + ROS 2 Humble
 
-The Docker image has been built natively on both x86_64 and DGX Spark arm64. Livox-SDK2,
-`livox_ros_driver2`, the Orbbec ROS2 wrapper, and Elevator-LIO are built for the target architecture;
+The earlier Docker image was built natively on both x86_64 and DGX Spark arm64.
+The three-camera/two-AHRS extension still requires a Docker build and hardware verification.
+Livox-SDK2, `livox_ros_driver2`, the Orbbec and MicroStrain drivers, and Elevator-LIO target the host architecture;
 do not reuse image binaries across architectures.
 
 OpenCV is currently only used for debugging windows such as covariance matrix and elevator-state curve visualization. These windows are disabled in the default configuration, but the source code and CMake still include and link OpenCV. You can remove these dependencies if needed.

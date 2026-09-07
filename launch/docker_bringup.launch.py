@@ -34,9 +34,9 @@ def generate_launch_description():
     )
     orbbec_launch = PathJoinSubstitution(
         [
-            FindPackageShare("orbbec_camera"),
+            FindPackageShare("lio"),
             "launch",
-            "gemini_330_series.launch.py",
+            "gemini_336l_multi.launch.py",
         ]
     )
 
@@ -73,6 +73,11 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_enable_depth", default_value="true"),
             DeclareLaunchArgument("camera_enable_point_cloud", default_value="true"),
             DeclareLaunchArgument("camera_enable_imu", default_value="true"),
+            DeclareLaunchArgument(
+                "use_gx5_driver", default_value=EnvironmentVariable(
+                    "USE_GX5_DRIVER", default_value="false"
+                ),
+            ),
             Node(
                 package="livox_ros_driver2",
                 executable="livox_ros_driver2_node",
@@ -96,15 +101,19 @@ def generate_launch_description():
                 condition=IfCondition(use_orbbec_camera),
                 launch_arguments={
                     "camera_name": camera_name,
-                    "serial_number": camera_serial_number,
-                    "usb_port": camera_usb_port,
-                    "enable_color": camera_enable_color,
-                    "enable_depth": camera_enable_depth,
-                    "enable_point_cloud": camera_enable_point_cloud,
-                    "enable_accel": camera_enable_imu,
-                    "enable_gyro": camera_enable_imu,
-                    "enable_sync_output_accel_gyro": camera_enable_imu,
+                    "camera_serial_number": camera_serial_number,
+                    "camera_usb_port": camera_usb_port,
+                    "camera_enable_color": camera_enable_color,
+                    "camera_enable_depth": camera_enable_depth,
+                    "camera_enable_point_cloud": camera_enable_point_cloud,
+                    "camera_enable_imu": camera_enable_imu,
                 }.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(PathJoinSubstitution([
+                    FindPackageShare("lio"), "launch", "gx5_dual.launch.py",
+                ])),
+                condition=IfCondition(LaunchConfiguration("use_gx5_driver")),
             ),
             Node(
                 package="lio",

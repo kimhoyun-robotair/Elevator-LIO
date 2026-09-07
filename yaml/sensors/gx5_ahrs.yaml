@@ -1,0 +1,31 @@
+# Shared settings for the two USB-connected 3DM-GX5-AHRS units.
+# The launch file supplies a distinct port, namespace and frame_id for each.
+/**:
+  ros__parameters:
+    baudrate: 115200
+    set_baud: false
+    device_setup: true
+    save_settings: false
+    use_enu_frame: true
+    timestamp_source: 2
+    imu_data_raw_rate: 100
+    imu_data_rate: 0
+    imu_mag_data_rate: 100
+    filter_imu_data_rate: 100
+    filter_auto_init: true
+    filter_heading_source: 1
+    filter_enable_magnetometer_aiding: true
+    filter_enable_gnss_pos_vel_aiding: false
+    filter_enable_gnss_heading_aiding: false
+    filter_human_readable_status_data_rate: 1
+    filter_odometry_earth_data_rate: 0
+    filter_odometry_map_data_rate: 0
+    gnss1_llh_position_data_rate: 0
+    gnss1_velocity_data_rate: 0
+    gnss2_llh_position_data_rate: 0
+    gnss2_velocity_data_rate: 0
+    tf_mode: 0
+    publish_mount_to_frame_id_transform: false
+    gnss1_antenna_offset_source: 0
+    gnss2_antenna_offset_source: 0
+    filter_speed_lever_arm_source: 0

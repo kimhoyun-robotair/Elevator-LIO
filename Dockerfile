@@ -10,6 +10,7 @@ ARG BUILD_JOBS=4
 ARG LIVOX_SDK2_REF=08f523c930b2f0ba1e98a6afaa8d7476bf479908
 ARG LIVOX_ROS_DRIVER2_REF=4a1def929e5b59c7a8122d19fce6efba581ce9f7
 ARG ORBBEC_ROS2_REF=ce08bce25f7a0a6fe939ece87ec945447109581f
+ARG MICROSTRAIN_ROS2_REF=3ad64b9491f07a60fdaed1a3b990bc94421a58d9
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -19,6 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ROS_LOCALHOST_ONLY=0 \
     USE_LIVOX_DRIVER=true \
     USE_ORBBEC_CAMERA=false \
+    USE_GX5_DRIVER=false \
     LIVOX_CONFIG_PATH=/tmp/lio-home/MID360_config.json \
     QT_X11_NO_MITSHM=1 \
     LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
@@ -90,6 +92,18 @@ RUN mkdir -p src \
 RUN git clone --filter=blob:none https://github.com/orbbec/OrbbecSDK_ROS2.git \
         src/OrbbecSDK_ROS2 \
     && git -C src/OrbbecSDK_ROS2 checkout --detach "${ORBBEC_ROS2_REF}"
+
+# MicroStrain ROS2 4.8.1: build only the driver and its messages, including
+# the pinned common code and MIP SDK, natively on amd64 and arm64.
+RUN git clone --filter=blob:none https://github.com/LORD-MicroStrain/microstrain_inertial.git \
+        src/microstrain_inertial \
+    && git -C src/microstrain_inertial checkout --detach "${MICROSTRAIN_ROS2_REF}" \
+    && git -C src/microstrain_inertial submodule update --init --recursive \
+        microstrain_inertial_driver/microstrain_inertial_driver_common \
+        microstrain_inertial_msgs/microstrain_inertial_msgs_common \
+    && rm -rf src/microstrain_inertial/microstrain_inertial_description \
+        src/microstrain_inertial/microstrain_inertial_examples \
+        src/microstrain_inertial/microstrain_inertial_rqt
 
 COPY . /ros2_ws/src/elevator_lio
 

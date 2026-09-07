@@ -45,6 +45,8 @@
   <exec_depend condition="$ROS_VERSION == 2">rviz2</exec_depend>
   <exec_depend condition="$ROS_VERSION == 2">launch</exec_depend>
   <exec_depend condition="$ROS_VERSION == 2">launch_ros</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 2">ament_index_python</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 2">python3-yaml</exec_depend>
   <depend>pluginlib</depend>
 
   <build_depend condition="$ROS_VERSION == 1">message_generation</build_depend>

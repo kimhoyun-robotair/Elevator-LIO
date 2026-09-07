@@ -114,10 +114,13 @@ Elevator-LIO 的设计遵循开箱即用的原则，集成了许多便于使用�
 ### Docker（amd64 / DGX Spark arm64）
 
 仓库提供同一个多架构 Docker 配置，在 amd64 Ubuntu 笔记本和 arm64 DGX Spark 上原生构建
-Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、OrbbecSDK ROS2、
-Elevator-LIO 与 RViz2。容器可直接驱动 Ethernet MID-360 和 USB Gemini 336L，使用 host
+Ubuntu 22.04、ROS 2 Humble、Livox-SDK2、Livox ROS Driver 2、OrbbecSDK ROS2、MicroStrain ROS2、
+Elevator-LIO 与 RViz2。同一容器可驱动 Ethernet MID-360、最多三台 USB Gemini 336L 和两台
+USB 3DM-GX5-AHRS，使用 host
 network/IPC 和 X11；默认 ROS_DOMAIN_ID 为 73。传感器网络、udev 与完整用法见
 [Docker 指南](docker/README.md)。
+将 `docker/sensors.env.example` 复制为 `docker/sensors.env`，填写三台相机序列号、
+两台 AHRS 设备路径和 LiDAR IP，之后使用 `./docker/run.sh` 启动全部传感器。
 
 ```bash
 ./docker/run.sh build
@@ -132,8 +135,9 @@ LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 - Ubuntu 20.04 + ROS 1 Noetic
 - Ubuntu 22.04 + ROS 2 Humble
 
-Docker 镜像已在 x86_64 与 DGX Spark arm64 上完成原生构建验证。Livox-SDK2、
-`livox_ros_driver2`、Orbbec ROS2 wrapper 和 Elevator-LIO 会针对目标架构构建；
+此前的 Docker 镜像已在 x86_64 与 DGX Spark arm64 上完成原生构建验证。
+本次三相机/双 AHRS 扩展仍需进行 Docker 构建与硬件验证。Livox-SDK2、
+`livox_ros_driver2`、Orbbec、MicroStrain 驱动和 Elevator-LIO 会针对目标架构构建；
 不同架构之间不能复用镜像内的二进制文件。
 
 OpenCV 目前只用于协方差矩阵和电梯状态曲线的调试窗口，默认配置中这些窗口均关闭；但源码和 CMake

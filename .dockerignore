@@ -8,6 +8,7 @@ log
 temp
 PCD
 docker/data
+docker/sensors.env
 docker/log
 docker/.xauth
 __pycache__
