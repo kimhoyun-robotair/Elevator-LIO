@@ -39,7 +39,7 @@ def launch_cameras(context):
         raise RuntimeError("Camera serial numbers must be distinct")
 
     upstream = PathJoinSubstitution([
-        FindPackageShare("orbbec_camera"), "launch", "gemini_330_series.launch.py",
+        FindPackageShare("lio"), "launch", "gemini_336l_compat.launch.py",
     ])
     actions = []
     for index, (name, serial) in enumerate(cameras):

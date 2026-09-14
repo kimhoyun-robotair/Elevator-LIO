@@ -37,6 +37,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev/bus/usb:/dev/bus/usb:rw
       - ./yaml:/ros2_ws/install/share/lio/yaml:ro
+      - ./launch:/ros2_ws/install/share/lio/launch:ro
       - ./PCD:/ros2_ws/src/elevator_lio/PCD:rw
       - ./temp:/ros2_ws/src/elevator_lio/temp:rw
       - ${LIO_DATA_DIR:-./docker/data}:/data:rw

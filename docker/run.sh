@@ -38,7 +38,7 @@ Environment:
   GX5_PORT_1=/dev/serial/by-id/...  First GX5 host port (namespace: gx5_1)
   GX5_PORT_2=/dev/serial/by-id/...  Second GX5 host port (namespace: gx5_2)
   LIO_CONFIG=root_config.yaml   Select a root YAML under this repository's yaml/
-  LIO_MOUNT_CONFIG=true         Mount host yaml/ for a custom launch command
+  LIO_MOUNT_CONFIG=true         Mount host yaml/ and launch/ for a custom command
   LIO_DATA_DIR=/path            Host directory mounted at /data
   LIO_LOG_DIR=/path             Persist ROS state/logs (default: docker/log)
   ROS_DOMAIN_ID=73              DDS domain shared with host ROS 2 processes
@@ -291,6 +291,7 @@ fi
 if [[ "${MOUNT_CONFIG}" == "true" ]]; then
     docker_args+=(
         --volume "${REPO_ROOT}/yaml:/ros2_ws/install/share/lio/yaml:ro"
+        --volume "${REPO_ROOT}/launch:/ros2_ws/install/share/lio/launch:ro"
     )
 fi
 

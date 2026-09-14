@@ -128,6 +128,217 @@ network/IPC 和 X11；默认 ROS_DOMAIN_ID 为 73。传感器网络、udev 与�
 LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 ```
 
+### 센서 Docker 명령어 모음 (한국어)
+
+아래 명령은 **호스트의 저장소 루트**에서 실행합니다. 현재 호스트 설정은 MID-360 1대,
+Gemini 336L 3대(`front`, `left`, `right`), GX5-AHRS 2대(`gx5_1`, `gx5_2`)입니다.
+장치 정보는 `docker/sensors.env`에 보존되며, 기본 ROS 도메인은 `73`입니다.
+다른 호스트에서는 먼저 [센서 설정 가이드](docker/README.md)를 따라 설정합니다.
+
+#### 실행·종료·컨테이너 접속
+
+```bash
+# 터미널 A: 전체 센서 + LIO + RViz 실행 (이 터미널은 계속 열어둡니다)
+./docker/run.sh
+
+# GUI 없이 전체 센서 + LIO 실행
+USE_RVIZ=false ./docker/run.sh
+
+# GX5를 제외하고 기존 LiDAR + 카메라만 실행
+USE_GX5_DRIVER=false ./docker/run.sh
+
+# 실행 상태 / CPU·메모리 사용량
+docker ps --filter name=elevator-lio
+docker stats --no-stream elevator-lio
+
+# 터미널 B: 실행 중인 컨테이너에 접속 (ROS 환경 자동 설정)
+./docker/run.sh exec
+# 접속한 쉘에서 빠져나오기: exit (센서 실행은 유지됩니다)
+
+# 실행 로그: Ctrl-C는 로그 조회만 종료
+docker logs --tail 100 -f elevator-lio
+
+# 센서 종료: 터미널 A에서 Ctrl-C 또는 다른 터미널에서 아래 명령
+docker stop elevator-lio
+# 재실행
+./docker/run.sh
+```
+
+위 실행 예제는 용도에 맞게 **하나만** 선택합니다. 기본 컨테이너는 종료 시 삭제되므로
+`docker start` 대신 `./docker/run.sh`로 다시 생성합니다. `exec`는 실행 중인 컨테이너가
+필요하며, `No such container`가 나오면 먼저 실행 상태를 확인합니다.
+`./docker/run.sh shell`은 별도의 임시 개발 컨테이너입니다.
+
+#### 토픽·노드·파라미터 확인
+
+아래 명령은 센서가 실행 중일 때 **다른 터미널**에서 실행합니다.
+
+```bash
+./docker/run.sh exec ros2 topic list
+./docker/run.sh exec ros2 topic list -t
+./docker/run.sh exec ros2 node list
+./docker/run.sh exec ros2 node info /gx5_1/microstrain_inertial_driver
+./docker/run.sh exec ros2 topic info -v /gx5_1/ekf/imu/data
+./docker/run.sh exec ros2 topic type /livox/lidar
+./docker/run.sh exec ros2 interface show sensor_msgs/msg/Imu
+./docker/run.sh exec ros2 service list
+./docker/run.sh exec ros2 param list /gx5_1/microstrain_inertial_driver
+./docker/run.sh exec ros2 param get /gx5_1/microstrain_inertial_driver port
+./docker/run.sh exec ros2 param get /gx5_2/microstrain_inertial_driver frame_id
+```
+
+| 토픽 | 내용 |
+|---|---|
+| `/livox/lidar` | LiDAR 점군, `livox_ros_driver2/msg/CustomMsg`, 설정 10 Hz |
+| `/livox/imu` | Livox 내장 IMU, LIO 입력 |
+| `/{front,left,right}/color/image_raw` | 각 카메라 RGB 영상 |
+| `/{front,left,right}/depth/image_raw` | 각 카메라 depth 영상 |
+| `/{front,left,right}/color/camera_info`, `…/depth/camera_info` | 영상 보정 정보 |
+| `/{front,left,right}/depth/points` | 각 카메라 depth 점군 |
+| `/{front,left,right}/gyro_accel/sample` | 각 카메라 IMU |
+| `/{gx5_1,gx5_2}/imu/data_raw` | GX5 가속도·각속도, 설정 100 Hz |
+| `/{gx5_1,gx5_2}/ekf/imu/data` | GX5 AHRS 자세 포함 IMU, 설정 100 Hz |
+| `/{gx5_1,gx5_2}/imu/mag` | GX5 자기장, 설정 100 Hz |
+| `/{gx5_1,gx5_2}/ekf/status` | 모델·시리얼·필터 상태·오류 플래그, 1 Hz |
+| `/LIO/odom_imu`, `/LIO/odom_vehicle` | LIO 추정 자세·위치 |
+| `/LIO/global_map`, `/LIO/clouds_lidar` | LIO 지도·점군 |
+| `/tf`, `/tf_static` | 좌표 변환 |
+
+표의 `{…}`는 여러 namespace를 줄여 쓴 표기입니다. 실제 명령에는 `/front/...`처럼
+하나의 이름을 넣습니다. GX5 토픽은 독립 발행되며 LIO는 기존 Livox IMU 입력을 유지합니다.
+
+#### 실제 값·AHRS 상태·수신 주기 확인
+
+```bash
+# 한 메시지만 출력하고 종료
+./docker/run.sh exec ros2 topic echo /livox/imu --once
+./docker/run.sh exec ros2 topic echo /gx5_1/ekf/status --once
+./docker/run.sh exec ros2 topic echo /gx5_2/ekf/status --once
+./docker/run.sh exec ros2 topic echo /gx5_1/ekf/imu/data --field orientation --once
+./docker/run.sh exec ros2 topic echo /gx5_2/imu/mag --once
+./docker/run.sh exec ros2 topic echo /LIO/odom_imu --field pose.pose --once
+# 영상 바이트 전체 대신 header 확인
+./docker/run.sh exec ros2 topic echo /front/color/image_raw --field header --once
+
+# 각각 실행하고 Ctrl-C로 조회 종료
+./docker/run.sh exec ros2 topic hz /livox/lidar
+./docker/run.sh exec ros2 topic hz /livox/imu
+./docker/run.sh exec ros2 topic hz /front/color/image_raw
+./docker/run.sh exec ros2 topic hz /left/depth/image_raw
+./docker/run.sh exec ros2 topic hz /right/depth/image_raw
+./docker/run.sh exec ros2 topic hz /gx5_1/ekf/imu/data
+./docker/run.sh exec ros2 topic hz /gx5_2/ekf/imu/data
+./docker/run.sh exec ros2 topic bw /front/color/image_raw
+```
+
+GX5 상태에서 `serial_number`, `filter_state`, `status_flags`를 확인합니다. 이 호스트의
+매핑은 `gx5_1=6253.211422`, `gx5_2=6253.219818`이고, 실기 검증에서 두 대 모두
+`Solution Valid` 및 빈 오류 플래그를 확인했습니다. `hz`는 CLI가 실제 받은 주기이므로
+영상·점군 동시 구독에 따른 부하와 QoS에 영향을 받을 수 있습니다.
+
+#### rosbag 녹화 — 컨테이너를 지워도 데이터 보존
+
+ROS 2에서는 `ros2 bag record -a`를 사용합니다. **터미널 A의 센서는 켜두고**, 터미널 B에서
+아래 녹화 예제 중 하나를 실행합니다. `/data`는 기본적으로 호스트 `docker/data/`에
+연결됩니다. `LIO_DATA_DIR`을 지정했다면 해당 디렉터리에 저장됩니다.
+
+```bash
+# 모든 공개 토픽 녹화 (RGB/depth/점군/LIO 출력 포함)
+./docker/run.sh exec ros2 bag record -a -o "/data/all_$(date +%Y%m%d_%H%M%S)"
+
+# LiDAR + GX5만 선택 녹화
+./docker/run.sh exec ros2 bag record \
+  -o "/data/lidar_gx5_$(date +%Y%m%d_%H%M%S)" \
+  /livox/lidar /livox/imu \
+  /gx5_1/imu/data_raw /gx5_1/ekf/imu/data /gx5_1/imu/mag /gx5_1/ekf/status \
+  /gx5_2/imu/data_raw /gx5_2/ekf/imu/data /gx5_2/imu/mag /gx5_2/ekf/status
+
+# 센서 namespace + TF만 녹화 (LIO 출력 제외)
+./docker/run.sh exec ros2 bag record \
+  -e '^/(livox|front|left|right|gx5_1|gx5_2)/|^/tf(_static)?$' \
+  -o "/data/sensors_$(date +%Y%m%d_%H%M%S)"
+
+# 전체 토픽을 60초 단위 파일로 분할 (60초 후 종료가 아니라 계속 녹화)
+./docker/run.sh exec ros2 bag record -a -d 60 \
+  -o "/data/split_$(date +%Y%m%d_%H%M%S)"
+
+# 전체 토픽을 녹화하되 압축 영상·카메라 점군처럼 중복 용량이 큰 항목 제외
+./docker/run.sh exec ros2 bag record -a \
+  -x '/(compressed|compressedDepth|theora)$|^/(front|left|right)/depth/points$' \
+  -o "/data/reduced_$(date +%Y%m%d_%H%M%S)"
+```
+
+녹화 종료는 **녹화 터미널에서 Ctrl-C**입니다. 저장 완료 후 센서 컨테이너를 종료합니다.
+기본 저장 형식은 SQLite3(`metadata.yaml` + `.db3`)이며 출력 디렉터리 이름은 새 이름을
+사용합니다. 영상 3대와 점군 전체 녹화는 저장 용량·쓰기 대역폭을 많이 사용합니다.
+
+```bash
+# 호스트에서 저장 위치·남은 공간 확인
+ls -lh docker/data/
+du -sh docker/data/*
+df -h docker/data/
+
+# 실제 생성된 bag 디렉터리명으로 변경
+BAG_DIR=/data/all_20260914_140000
+./docker/run.sh exec ros2 bag info "$BAG_DIR"
+```
+
+#### 센서가 꺼져 있어도 bag 정보 확인·재생
+
+`exec` 없이 사용자 명령을 넘기면 작업용 임시 컨테이너를 실행합니다. 아래 명령은
+LiDAR/GX5 드라이버를 시작하지 않으며 카메라 launch도 실행하지 않습니다. 로컬 설정에
+따라 카메라 USB 마운트·권한 검사는 수행될 수 있습니다.
+
+```bash
+# 실제 bag 디렉터리명으로 변경
+BAG_DIR=/data/all_20260914_140000
+USE_LIVOX_DRIVER=false USE_GX5_DRIVER=false \
+  ./docker/run.sh ros2 bag info "$BAG_DIR"
+
+# 실시간 센서(domain 73)와 분리된 domain 74에서 재생
+ROS_DOMAIN_ID=74 USE_LIVOX_DRIVER=false USE_GX5_DRIVER=false \
+  ./docker/run.sh ros2 bag play "$BAG_DIR"
+
+# 0.5배속 재생 (위 기본 재생 대신 선택)
+ROS_DOMAIN_ID=74 USE_LIVOX_DRIVER=false USE_GX5_DRIVER=false \
+  ./docker/run.sh ros2 bag play "$BAG_DIR" --rate 0.5
+
+# 선택 토픽만 반복 재생
+ROS_DOMAIN_ID=74 USE_LIVOX_DRIVER=false USE_GX5_DRIVER=false \
+  ./docker/run.sh ros2 bag play "$BAG_DIR" --loop \
+  --topics /gx5_1/ekf/imu/data /gx5_2/ekf/imu/data
+```
+
+재생 종료는 Ctrl-C입니다. 재생 데이터를 보는 노드도 `ROS_DOMAIN_ID=74`를 사용합니다.
+예를 들어 다른 터미널에서 다음과 같이 확인합니다.
+
+```bash
+ROS_DOMAIN_ID=74 USE_LIVOX_DRIVER=false USE_GX5_DRIVER=false \
+  ./docker/run.sh ros2 topic echo /gx5_1/ekf/imu/data --once
+```
+
+#### 연결 문제 확인
+
+```bash
+# 호스트의 LiDAR NIC / IP / USB 연결과 속도
+ip -br link
+ip -br -4 addr
+ping -c 3 192.168.1.126
+lsusb
+lsusb -t
+ls -l /dev/serial/by-id/
+
+# 컨테이너에서 GX5 장치 및 ROS 도메인 확인
+./docker/run.sh exec ls -l /dev/gx5_1 /dev/gx5_2
+./docker/run.sh exec printenv ROS_DOMAIN_ID
+```
+
+LiDAR IP는 실제 `docker/sensors.env` 값으로 바꿉니다. GX5 USB를 재연결하면
+`docker stop elevator-lio` 후 `./docker/run.sh`로 다시 시작합니다.
+호스트 ROS CLI를 직접 쓸 때는 설치된 ROS 환경을 source하고 `export ROS_DOMAIN_ID=73`을
+설정합니다. 도메인을 바꾼 뒤 이전 목록이 보이면 `ros2 daemon stop` 후 다시 조회합니다.
+호스트에 Livox/MicroStrain 메시지 패키지가 없다면 위 `./docker/run.sh exec ...` 방식을 사용합니다.
+
 ### 环境要求
 
 当前代码使用同一套源码和 `package.xml` 支持：
@@ -136,7 +347,7 @@ LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 - Ubuntu 22.04 + ROS 2 Humble
 
 此前的 Docker 镜像已在 x86_64 与 DGX Spark arm64 上完成原生构建验证。
-本次三相机/双 AHRS 扩展仍需进行 Docker 构建与硬件验证。Livox-SDK2、
+当前主机已验证 MID-360、三台 Gemini 336L、两台 GX5-AHRS 的并行数据接收及容器重建后启动。其他主机/架构仍需分别验证。Livox-SDK2、
 `livox_ros_driver2`、Orbbec、MicroStrain 驱动和 Elevator-LIO 会针对目标架构构建；
 不同架构之间不能复用镜像内的二进制文件。
 

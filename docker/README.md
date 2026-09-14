@@ -59,6 +59,31 @@ Bash 설정 파일이므로 예제의 기본값 문법을 유지하면 명령 �
 USE_LIVOX_DRIVER=false USE_ORBBEC_CAMERA=false USE_GX5_DRIVER=false ./docker/run.sh
 ```
 
+## 반복 실행과 종료
+
+`docker/sensors.env`의 LiDAR IP, 카메라 3대 시리얼과 namespace, GX5 활성화 여부 및 두 포트 경로는
+컨테이너를 삭제해도 호스트에 남습니다. 실행할 때마다 자동으로 읽습니다.
+
+```bash
+./docker/run.sh                       # 센서 + LIO + RViz 실행
+# 실행한 터미널에서 Ctrl-C로 종료하거나, 다른 터미널에서:
+docker stop elevator-lio
+./docker/run.sh                       # 새 컨테이너로 다시 실행
+```
+
+`run.sh`의 기본 실행과 Compose는 저장소의 `launch/`와 `yaml/`을 읽기 전용으로 마운트합니다.
+따라서 launch 설정 수정은 이미지 재빌드 없이 다음 실행에 반영됩니다. C++/드라이버 변경은
+기존과 같이 이미지 재빌드가 필요합니다. `run.sh`는 종료 시 컨테이너를 삭제하므로 이후 실행은
+`docker start` 대신 `./docker/run.sh`를 사용합니다.
+
+Gemini 336L firmware 1.2.81에서는 SDK가 쓰는 depth 자동 노출 우선순위 속성 `2052`가
+거부됩니다. 저장소의 `gemini_336l_compat.launch.py`는 이 속성 전달과 preset 덮어쓰기를
+생략하고 upstream의 RGB/depth/IMU 프로파일 기본값을 유지합니다. 이 보정은 매 실행에
+적용되며 컨테이너 내부 파일을 수동 수정할 필요가 없습니다.
+
+동일한 센서를 사용하는 다른 컨테이너의 드라이버는 종료한 상태여야 합니다. 다른 root
+카메라 드라이버를 다시 실행하면 호스트 공유 메모리 잠금의 소유권이 달라질 수 있습니다.
+
 ## MID-360을 컨테이너에서 직접 실행
 
 ROS 2 배포판이 서로 다른 컨테이너 간 통신은 호환이 보장되지 않습니다. 이 구성은 DGX Spark
@@ -199,7 +224,29 @@ GX5 USB를 재연결한 경우에는 Ctrl-C 후 `./docker/run.sh`로 컨테이�
 AHRS 내부 필터가 초기화될 때까지 자세값과 상태를 확인하십시오. 장치 설정은 비휘발성 메모리에
 저장하지 않습니다. 두 GX5 토픽의 LIO 입력 연결, 센서 융합, 장착 위치 TF는 추가하지 않습니다.
 
+### 이 호스트에서 확인한 GX5 매핑
+
+`docker/sensors.env`에 아래 두 장치의 `/dev/serial/by-id/` 경로를 저장했으며,
+GX5도 기본 활성화됩니다. 기존 LiDAR·카메라 3대와 함께 `./docker/run.sh`로 실행합니다.
+
+| Namespace | 모델 | 시리얼 | 컨테이너 포트 |
+|---|---|---|---|
+| `gx5_1` | 3DM-GX5-AHRS | `6253.211422` | `/dev/gx5_1` |
+| `gx5_2` | 3DM-GX5-AHRS | `6253.219818` | `/dev/gx5_2` |
+
+USB 포트/연결 순서가 바뀌어도 시리얼에 따른 매핑은 유지됩니다. GX5를 연결하지 않고
+기존 LiDAR·카메라만 실행하려면 다음처럼 이번 실행에서만 비활성화할 수 있습니다.
+
+```bash
+USE_GX5_DRIVER=false ./docker/run.sh
+```
+
+GX5는 독립된 AHRS 토픽을 추가하며 LIO의 기존 Livox IMU 입력은 유지합니다.
+
 ## ROS 2 통신과 확인
+
+실행·종료, 토픽 조회, GX5 상태, rosbag 녹화·재생 명령은
+[루트 README 명령어 모음](../README.md#센서-docker-명령어-모음-한국어)에 정리되어 있습니다.
 
 같은 ROS graph에 참여할 모든 프로세스와 컨테이너는 `ROS_DOMAIN_ID=73`과
 `ROS_LOCALHOST_ONLY=0`을 사용해야 합니다. 다른 domain이 필요하면 모든 실행에 같은 값으로
@@ -211,14 +258,14 @@ ROS_DOMAIN_ID=73 LIVOX_LIDAR_IP=192.168.1.112 ./docker/run.sh
 # 별도 터미널: 실행 중인 동일 컨테이너에서 확인
 ./docker/run.sh exec ros2 topic list
 ./docker/run.sh exec ros2 topic info -v /livox/lidar
-./docker/run.sh exec ros2 topic info -v /camera/depth/image_raw
+./docker/run.sh exec ros2 topic info -v /front/depth/image_raw
 
 # 아래 명령에서 주기 값이 계속 출력되어야 실제 센서 데이터가 들어오는 것입니다(Ctrl-C로 종료).
 ./docker/run.sh exec ros2 topic hz /livox/lidar
 ./docker/run.sh exec ros2 topic hz /livox/imu
-./docker/run.sh exec ros2 topic hz /camera/depth/image_raw
-./docker/run.sh exec ros2 topic hz /camera_2/depth/image_raw
-./docker/run.sh exec ros2 topic hz /camera_3/depth/image_raw
+./docker/run.sh exec ros2 topic hz /front/depth/image_raw
+./docker/run.sh exec ros2 topic hz /left/depth/image_raw
+./docker/run.sh exec ros2 topic hz /right/depth/image_raw
 ./docker/run.sh exec ros2 topic hz /gx5_1/ekf/imu/data
 ./docker/run.sh exec ros2 topic hz /gx5_2/ekf/imu/data
 ```
@@ -290,8 +337,9 @@ docker buildx build \
 Livox-SDK2와 세 종류의 ROS 드라이버는 target architecture용으로 빌드되며, upstream 참조는 재현성을
 위해 `Dockerfile`에 commit SHA로 고정되어 있습니다.
 
-이번 3-camera/2-AHRS 구성은 실제 Docker 빌드와 센서 스트리밍 검증이 필요합니다.
-변경 작업 환경에는 Docker daemon과 센서가 없어 해당 검증은 수행하지 못했습니다.
+현재 호스트에서 MID-360, Gemini 336L 3대, GX5-AHRS 2대의 동시 데이터 수신과
+컨테이너 재생성 후 재연결을 검증했습니다. GX5 두 대는 약 100 Hz 수신 및
+`Solution Valid` 상태를 확인했습니다. 다른 호스트/아키텍처의 실기 동작은 별도 검증이 필요합니다.
 
 ## Upstream references
 
