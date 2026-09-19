@@ -1,0 +1,12 @@
+# Simulated ML-X FLASH: x forward, y left, z up; meters and seconds.
+lidar_type: 2
+offset:
+  imu_t_lidar: [0.4, 0.0, 0.022]
+  imu_R_lidar: [[0.97437006, 0.0, -0.22495105], [0.0, 1.0, 0.0], [0.22495105, 0.0, 0.97437006]]
+  lidar_t_body: [-0.39469695, 0.0, 0.06854428]
+  lidar_R_body: [[0.97437006, 0.0, 0.22495105], [0.0, 1.0, 0.0], [-0.22495105, 0.0, 0.97437006]]
+topic_sub:
+  lidar_topic_name: /mlx/pointcloud
+  imu_topic_name: /imu/data
+  wheel_topic_name: /lio/unused_wheel
+  elevator_flag_topic_name: /LIO/set_elevator_flag

@@ -235,8 +235,8 @@ void LIONode::publishGlobalMap() {
                     ++pub_time_seq);
         }
         if(duration_ms.count() > 10){
-            cerr << "GlobalMap pub cost more than 10ms ! stop publish ! " << endl;
-            global_map_pub_enable = false;
+            ROS_WARN_THROTTLE(5.0, "Global map publishing took %.1f ms; visualization remains enabled",
+                              duration_ms.count());
         }
         last_time = lidar_end_time;
     }

@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
 ARG ROS_DISTRO=humble
+ARG UBUNTU_CODENAME=jammy
 # Docker Official Images do not publish a Humble `desktop` tag. Start from the
 # multi-architecture ros-base image and install the desktop metapackage below.
-FROM ros:${ROS_DISTRO}-ros-base-jammy
+FROM ros:${ROS_DISTRO}-ros-base-${UBUNTU_CODENAME}
 
 ARG ROS_DISTRO
 ARG BUILD_JOBS=4

@@ -199,13 +199,11 @@ add_executable(sim_node
 )
 lio_configure_target(sim_node)
 
-qt5_wrap_cpp(ELEVATOR_STATUS_PANEL_MOC include/rviz/ElevatorStatusPanel.h
-    OPTIONS -DLIO_ROS_VERSION=${LIO_ROS_VERSION}
-)
 add_library(lio_rviz_plugins SHARED
     src/rviz/ElevatorStatusPanel.cpp
-    ${ELEVATOR_STATUS_PANEL_MOC}
+    include/rviz/ElevatorStatusPanel.h
 )
+set_target_properties(lio_rviz_plugins PROPERTIES AUTOMOC ON)
 target_include_directories(lio_rviz_plugins PRIVATE ${LIO_COMMON_INCLUDE_DIRS})
 target_compile_definitions(lio_rviz_plugins PRIVATE LIO_ROS_VERSION=${LIO_ROS_VERSION})
 target_link_libraries(lio_rviz_plugins Qt5::Widgets)
